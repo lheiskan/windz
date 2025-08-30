@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExceptionReport xmlns="http://www.opengis.net/ows/1.1"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.opengis.net/ows/1.1 http://schemas.opengis.net/ows/1.1.0/owsExceptionReport.xsd"
+  version="2.0.0">
+
+
+  <Exception exceptionCode="OperationParsingFailed">
+    <ExceptionText>Fmi::stoul failed to convert &apos;151028,100971,101104&apos; to unsigned long</ExceptionText>
+    <ExceptionText>URI: /wfs?endtime=2025-08-30T14%3A00%3A00Z&amp;fmisid=151028%2C100971%2C101104&amp;parameters=windspeedms%2Cwindgust%2Cwinddirection&amp;request=getFeature&amp;service=WFS&amp;starttime=2025-08-30T12%3A00%3A00Z&amp;storedquery_id=fmi%3A%3Aobservations%3A%3Aweather%3A%3Amultipointcoverage&amp;version=2.0.0</ExceptionText>
+    
+  </Exception>
+
+</ExceptionReport>

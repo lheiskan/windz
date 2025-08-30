@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wfs:FeatureCollection
+  timeStamp="2025-08-27T21:00:00Z"
+  numberMatched="3"
+  numberReturned="3"
+  xmlns:wfs="http://www.opengis.net/wfs/2.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:gml="http://www.opengis.net/gml/3.2"
+  xmlns:inspire="http://inspire.ec.europa.eu/schemas/base/3.3"
+  xmlns:ef="http://inspire.ec.europa.eu/schemas/ef/4.0"
+  xmlns:ins_base2="http://inspire.ec.europa.eu/schemas/base2/2.0"
+  xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd
+  http://inspire.ec.europa.eu/schemas/ef/4.0 https://inspire.ec.europa.eu/schemas/ef/4.0/EnvironmentalMonitoringFacilities.xsd">
+
+  <wfs:member>
+    <ef:EnvironmentalMonitoringFacility gml:id="AWS-100971">
+      <gml:identifier codeSpace="http://xml.fmi.fi/namespace/stationcode/fmisid">100971</gml:identifier>
+      <gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/name">Helsinki Kaisaniemi</gml:name>
+      <gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/geoid">-16000150</gml:name>
+      
+      <ef:inspireId>
+        <inspire:Identifier>
+          <inspire:localId>100971</inspire:localId>
+          <inspire:namespace>http://xml.fmi.fi/namespace/identifier/station</inspire:namespace>
+        </inspire:Identifier>
+      </ef:inspireId>
+      
+      <ef:name>Helsinki Kaisaniemi</ef:name>
+      
+      <ef:operationalActivityPeriod>
+        <ef:OperationalActivityPeriod>
+          <ef:activityTime>
+            <gml:TimePeriod gml:id="time-100971">
+              <gml:beginPosition>1959-01-01T00:00:00Z</gml:beginPosition>
+            </gml:TimePeriod>
+          </ef:activityTime>
+        </ef:OperationalActivityPeriod>
+      </ef:operationalActivityPeriod>
+      
+      <ef:representativePoint>
+        <gml:Point gml:id="point-100971" srsName="http://www.opengis.net/def/crs/EPSG/0/4326" srsDimension="2">
+          <gml:pos>60.17523 24.94459</gml:pos>
+        </gml:Point>
+      </ef:representativePoint>
+      
+      <ef:belongsTo xlink:title="AWS" xlink:href="http://xml.fmi.fi/namespace/network/aws"/>
+      
+    </ef:EnvironmentalMonitoringFacility>
+  </wfs:member>
+
+  <wfs:member>
+    <ef:EnvironmentalMonitoringFacility gml:id="AWS-101104">
+      <gml:identifier codeSpace="http://xml.fmi.fi/namespace/stationcode/fmisid">101104</gml:identifier>
+      <gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/name">Espoo Tapiola</gml:name>
+      
+      <ef:inspireId>
+        <inspire:Identifier>
+          <inspire:localId>101104</inspire:localId>
+          <inspire:namespace>http://xml.fmi.fi/namespace/identifier/station</inspire:namespace>
+        </inspire:Identifier>
+      </ef:inspireId>
+      
+      <ef:name>Espoo Tapiola</ef:name>
+      
+      <ef:operationalActivityPeriod>
+        <ef:OperationalActivityPeriod>
+          <ef:activityTime>
+            <gml:TimePeriod gml:id="time-101104">
+              <gml:beginPosition>1995-05-01T00:00:00Z</gml:beginPosition>
+            </gml:TimePeriod>
+          </ef:activityTime>
+        </ef:OperationalActivityPeriod>
+      </ef:operationalActivityPeriod>
+      
+      <ef:representativePoint>
+        <gml:Point gml:id="point-101104" srsName="http://www.opengis.net/def/crs/EPSG/0/4326" srsDimension="2">
+          <gml:pos>60.17556 24.80222</gml:pos>
+        </gml:Point>
+      </ef:representativePoint>
+      
+      <ef:belongsTo xlink:title="AWS" xlink:href="http://xml.fmi.fi/namespace/network/aws"/>
+      
+    </ef:EnvironmentalMonitoringFacility>
+  </wfs:member>
+
+  <wfs:member>
+    <ef:EnvironmentalMonitoringFacility gml:id="SYNOP-100968">
+      <gml:identifier codeSpace="http://xml.fmi.fi/namespace/stationcode/fmisid">100968</gml:identifier>
+      <gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/name">Helsinki Malmi</gml:name>
+      
+      <ef:inspireId>
+        <inspire:Identifier>
+          <inspire:localId>100968</inspire:localId>
+          <inspire:namespace>http://xml.fmi.fi/namespace/identifier/station</inspire:namespace>
+        </inspire:Identifier>
+      </ef:inspireId>
+      
+      <ef:name>Helsinki Malmi</ef:name>
+      
+      <ef:operationalActivityPeriod>
+        <ef:OperationalActivityPeriod>
+          <ef:activityTime>
+            <gml:TimePeriod gml:id="time-100968">
+              <gml:beginPosition>1912-01-01T00:00:00Z</gml:beginPosition>
+            </gml:TimePeriod>
+          </ef:activityTime>
+        </ef:OperationalActivityPeriod>
+      </ef:operationalActivityPeriod>
+      
+      <ef:representativePoint>
+        <gml:Point gml:id="point-100968" srsName="http://www.opengis.net/def/crs/EPSG/0/4326" srsDimension="2">
+          <gml:pos>60.25440 25.04240</gml:pos>
+        </gml:Point>
+      </ef:representativePoint>
+      
+      <ef:belongsTo xlink:title="SYNOP" xlink:href="http://xml.fmi.fi/namespace/network/synop"/>
+      
+    </ef:EnvironmentalMonitoringFacility>
+  </wfs:member>
+
+</wfs:FeatureCollection>

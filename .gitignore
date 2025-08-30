@@ -1,0 +1,13 @@
+# Binaries
+windz-monitor
+*.exe
+
+# State files
+polling_state.json
+
+# OS files
+.DS_Store
+
+# Go build artifacts
+*.test
+*.out

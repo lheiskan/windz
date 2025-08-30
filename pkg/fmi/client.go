@@ -58,7 +58,7 @@ type WindDataRequest struct {
 	BBox *BBox
 
 	// Specific station IDs to query (optional, overrides BBox)
-	StationIDs []string
+	StationID string
 
 	// Wind parameters to fetch
 	Parameters []WindParameter
@@ -80,16 +80,8 @@ func (c *Client) StreamWindDataByStation(req WindDataRequest, callbacks WindData
 	params.Set("starttime", req.StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 	params.Set("endtime", req.EndTime.UTC().Format("2006-01-02T15:04:05Z"))
 
-	// Set geographic bounds or specific stations
-	if len(req.StationIDs) > 0 {
-		// Query specific stations by FMISID
-		for i, stationID := range req.StationIDs {
-			if i == 0 {
-				params.Set("fmisid", stationID)
-			} else {
-				params.Add("fmisid", stationID)
-			}
-		}
+	if req.StationID != "" {
+		params.Set("fmisid", req.StationID)
 	} else if req.BBox != nil {
 		// Query by bounding box
 		params.Set("bbox", req.BBox.String())
@@ -173,11 +165,11 @@ func (c *Client) StreamWindDataRegion(region BBox, startTime, endTime time.Time,
 }
 
 // StreamWindDataStations fetches wind data for specific stations
-func (c *Client) StreamWindDataStations(stationIDs []string, startTime, endTime time.Time, callbacks WindDataCallbacks) error {
+func (c *Client) StreamWindDataStations(stationID string, startTime, endTime time.Time, callbacks WindDataCallbacks) error {
 	req := WindDataRequest{
 		StartTime:  startTime,
 		EndTime:    endTime,
-		StationIDs: stationIDs,
+		StationID:  stationID,
 		Parameters: []WindParameter{WindSpeedMS, WindGustMS, WindDirection},
 	}
 	return c.StreamWindDataByStation(req, callbacks)

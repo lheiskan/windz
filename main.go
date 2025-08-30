@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -50,13 +49,20 @@ type StationPollingState struct {
 	SuccessfulPolls   int           `json:"successful_polls"`
 }
 
+// Station status information for SSE updates
+type StationStatus struct {
+	Interval    string    `json:"interval"`
+	SuccessRate float64   `json:"success_rate"`
+	LastPolled  time.Time `json:"last_polled"`
+}
+
 // SSE message structure
 type SSEMessage struct {
-	Type      string       `json:"type"`
-	StationID string       `json:"station_id,omitempty"`
-	Data      *WindReading `json:"data,omitempty"`
-	Status    string       `json:"status,omitempty"`
-	Timestamp time.Time    `json:"timestamp"`
+	Type          string         `json:"type"`
+	StationID     string         `json:"station_id,omitempty"`
+	Data          *WindReading   `json:"data,omitempty"`
+	StationStatus *StationStatus `json:"station_status,omitempty"`
+	Timestamp     time.Time      `json:"timestamp"`
 }
 
 // Global state
@@ -77,7 +83,7 @@ var (
 		{ID: "100945", Name: "Vänö", Region: "Kemiönsaari"},
 		{ID: "100908", Name: "Utö", Region: "Archipelago HELCOM"},
 
-		// Northern Coastal
+		// 	// Northern Coastal
 		{ID: "101267", Name: "Tahkoluoto", Region: "Pori"},
 		{ID: "101661", Name: "Tankar", Region: "Kokkola"},
 		{ID: "101673", Name: "Ulkokalla", Region: "Kalajoki"},
@@ -178,10 +184,10 @@ type DataBlock struct {
 
 // Polling intervals
 const (
-	IntervalFast    = 1 * time.Minute
-	IntervalMedium  = 10 * time.Minute
-	IntervalSlow    = 60 * time.Minute
-	IntervalMinimal = 24 * time.Hour
+	IntervalFast      = 1 * time.Minute
+	IntervalMedium    = 10 * time.Minute
+	IntervalSlow      = 60 * time.Minute
+	IntervalUltraSlow = 24 * time.Hour
 )
 
 func main() {
@@ -191,7 +197,6 @@ func main() {
 	log.Printf("Monitoring %d Finnish weather stations", len(stations))
 
 	// Initialize polling states
-	initializePollingStates()
 	loadPollingStates()
 
 	// Create context for graceful shutdown
@@ -236,22 +241,6 @@ func main() {
 	}
 }
 
-// Initialize polling states for all stations
-func initializePollingStates() {
-	pollingStatesMutex.Lock()
-	defer pollingStatesMutex.Unlock()
-
-	for _, station := range stations {
-		if _, exists := pollingStates[station.ID]; !exists {
-			pollingStates[station.ID] = &StationPollingState{
-				StationID:       station.ID,
-				CurrentInterval: IntervalFast,
-				LastPolled:      time.Now().Add(-IntervalFast), // Poll immediately
-			}
-		}
-	}
-}
-
 // Load polling states from file
 func loadPollingStates() {
 	data, err := os.ReadFile(*stateFile)
@@ -262,27 +251,15 @@ func loadPollingStates() {
 		return
 	}
 
-	var states map[string]*StationPollingState
-	if err := json.Unmarshal(data, &states); err != nil {
+	pollingStatesMutex.Lock()
+	defer pollingStatesMutex.Unlock()
+	if err := json.Unmarshal(data, &pollingStates); err != nil {
 		log.Printf("Error parsing polling states: %v", err)
 		return
 	}
 
-	pollingStatesMutex.Lock()
-	defer pollingStatesMutex.Unlock()
+	log.Printf("Loaded polling states for %d stations", len(pollingStates))
 
-	for id, state := range states {
-		if existing, exists := pollingStates[id]; exists {
-			existing.CurrentInterval = state.CurrentInterval
-			existing.ConsecutiveMisses = state.ConsecutiveMisses
-			existing.LastObservation = state.LastObservation
-			existing.SuccessRate = state.SuccessRate
-			existing.TotalPolls = state.TotalPolls
-			existing.SuccessfulPolls = state.SuccessfulPolls
-		}
-	}
-
-	log.Printf("Loaded polling states for %d stations", len(states))
 }
 
 // Save polling states to file
@@ -321,16 +298,33 @@ func runPollingScheduler(ctx context.Context) {
 
 // Poll stations that are due
 func pollDueStations() {
-	now := time.Now()
-	toPoll := []string{}
 
-	pollingStatesMutex.RLock()
-	for _, state := range pollingStates {
+	// Polling state is updated during this method
+	// TODO: refactor?
+	pollingStatesMutex.Lock()
+	defer pollingStatesMutex.Unlock()
+
+	now := time.Now()
+	toPoll := []*StationPollingState{}
+
+	// copy polling states for the stations we need to poll
+	for _, station := range stations {
+		state, exists := pollingStates[station.ID]
+
+		// create polling state if it does not yet exist for the station
+		if !exists {
+			state = &StationPollingState{
+				StationID:       station.ID,
+				CurrentInterval: IntervalFast,
+			}
+			pollingStates[station.ID] = state
+		}
+
+		// schedule poll if needed
 		if now.Sub(state.LastPolled) >= state.CurrentInterval {
-			toPoll = append(toPoll, state.StationID)
+			toPoll = append(toPoll, state)
 		}
 	}
-	pollingStatesMutex.RUnlock()
 
 	if len(toPoll) == 0 {
 		return
@@ -340,40 +334,58 @@ func pollDueStations() {
 		log.Printf("Polling %d stations: %v", len(toPoll), toPoll)
 	}
 
-	// Fetch data from FMI
-	results := fetchWindData(toPoll)
+	// Poll the scheduled stations
+	for _, state := range toPoll {
 
-	// Process results and update states
-	for stationID, observations := range results {
-		updatePollingState(stationID, observations)
-	}
+		endTime := time.Now()
+		startTime := endTime.Add(-2 * time.Hour)
+		if state.LastObservation.After(startTime) {
+			// start a bit after last observation
+			startTime = state.LastObservation.Add(time.Second)
+		}
 
-	// Handle stations with no data
-	for _, stationID := range toPoll {
-		if _, hasData := results[stationID]; !hasData {
-			updatePollingState(stationID, nil)
+		stationID := state.StationID
+
+		observations, err := fetchWindData(state.StationID, startTime, endTime)
+		if err != nil {
+			log.Printf("Error fetching wind data for station %s: %v", stationID, err)
+			continue
+		}
+
+		oldInterval := state.CurrentInterval
+		latestObservation, hasData := updatePollingState(state, observations)
+
+		if oldInterval != state.CurrentInterval {
+			broadcastSSE(SSEMessage{
+				Type:      "status",
+				StationID: stationID,
+				StationStatus: &StationStatus{
+					Interval:    formatInterval(state.CurrentInterval),
+					SuccessRate: state.SuccessRate,
+					LastPolled:  state.LastPolled,
+				},
+				Timestamp: time.Now(),
+			})
+		}
+
+		if hasData {
+			updateWindData(stationID, latestObservation)
 		}
 	}
 
-	// Save states periodically
-	savePollingStates()
+	return
 }
 
 // Fetch wind data from FMI API
 // fetchWindData fetches wind data using the FMI library
-func fetchWindData(stationIDs []string) map[string][]WindObservation {
-	results := make(map[string][]WindObservation)
-
-	// Time range: last 2 hours to ensure we get recent data
-	endTime := time.Now()
-	startTime := endTime.Add(-2 * time.Hour)
+func fetchWindData(stationID string, startTime, endTime time.Time) (result []WindObservation, err error) {
 
 	// Use FMI library for clean multi-station data fetching
 	callbacks := fmi.WindDataCallbacks{
+
 		OnStationData: func(stationData fmi.StationWindData) error {
 			// Convert FMI observations to our WindObservation format
-			observations := make([]WindObservation, 0, len(stationData.Observations))
-
+			result = make([]WindObservation, 0, len(stationData.Observations))
 			for _, obs := range stationData.Observations {
 				windObs := WindObservation{
 					Timestamp: obs.Timestamp,
@@ -392,15 +404,7 @@ func fetchWindData(stationIDs []string) map[string][]WindObservation {
 
 				// Only include observations with valid wind speed
 				if windObs.WindSpeed >= 0 && windObs.WindSpeed < 100 {
-					observations = append(observations, windObs)
-				}
-			}
-
-			if len(observations) > 0 {
-				results[stationData.StationID] = observations
-				if *debug {
-					log.Printf("Station %s (%s): Found %d wind observations",
-						stationData.StationID, stationData.StationName, len(observations))
+					result = append(result, windObs)
 				}
 			}
 
@@ -414,161 +418,10 @@ func fetchWindData(stationIDs []string) map[string][]WindObservation {
 		},
 	}
 
-	// FMI API limitation: multiple fmisid parameters in one request only returns data for the first station
-	// We need to make separate API calls for each station
-	for _, stationID := range stationIDs {
-		singleStationIDs := []string{stationID}
-		err := fmiClient.StreamWindDataStations(singleStationIDs, startTime, endTime, callbacks)
-		if err != nil {
-			log.Printf("Error fetching wind data for station %s: %v", stationID, err)
-		}
-	}
+	err = fmiClient.StreamWindDataStations(stationID, startTime, endTime, callbacks)
 
-	return results
+	return
 }
-
-// parseWindObservations - DEPRECATED, replaced by FMI library
-func parseWindObservations_DEPRECATED(positions []string, values string) []WindObservation {
-	observations := []WindObservation{}
-	valueLines := strings.Split(values, "\n")
-
-	// Positions array has format: lat lon timestamp for each observation
-	timestampCount := len(positions) / 3
-
-	for i := 0; i < timestampCount && i < len(valueLines); i++ {
-		if i*3+2 >= len(positions) {
-			break
-		}
-
-		// Extract timestamp (every 3rd element, starting from index 2)
-		timestampStr := positions[i*3+2]
-		timestamp := parseUnixTime(timestampStr)
-
-		// Parse wind values from the line
-		valueLine := strings.TrimSpace(valueLines[i])
-		if valueLine == "" {
-			continue
-		}
-
-		windValues := strings.Fields(valueLine)
-		if len(windValues) < 3 {
-			continue
-		}
-
-		windSpeed := parseFloat(windValues[0])
-		windGust := parseFloat(windValues[1])
-		windDirection := parseFloat(windValues[2])
-
-		// Filter out invalid observations
-		if windSpeed >= 0 && windSpeed < 100 && windDirection >= 0 && windDirection <= 360 {
-			obs := WindObservation{
-				Timestamp:     timestamp,
-				WindSpeed:     windSpeed,
-				WindGust:      windGust,
-				WindDirection: windDirection,
-			}
-			observations = append(observations, obs)
-		}
-	}
-
-	return observations
-}
-
-// parseMultiStationDataByOrder - DEPRECATED, replaced by FMI library
-func parseMultiStationDataByOrder_DEPRECATED(positions []string, values string, stationList []string, debug bool) map[string][]WindObservation {
-	results := make(map[string][]WindObservation)
-
-	if len(stationList) == 0 {
-		return results
-	}
-
-	valueLines := strings.Split(values, "\n")
-
-	// Group positions by unique coordinates to separate stations
-	coordinateGroups := make(map[string][]struct {
-		timestamp  time.Time
-		valueIndex int
-	})
-
-	uniqueCoords := []string{}
-	seenCoords := make(map[string]bool)
-
-	// Parse positions array: lat1, lon1, time1, lat2, lon2, time2, ...
-	for i := 0; i < len(positions); i += 3 {
-		if i+2 < len(positions) {
-			lat := positions[i]
-			lon := positions[i+1]
-			timestampStr := positions[i+2]
-
-			coordKey := lat + "_" + lon
-			timestamp := parseUnixTime(timestampStr)
-
-			// Track unique coordinates in order
-			if !seenCoords[coordKey] {
-				uniqueCoords = append(uniqueCoords, coordKey)
-				seenCoords[coordKey] = true
-			}
-
-			if _, exists := coordinateGroups[coordKey]; !exists {
-				coordinateGroups[coordKey] = []struct {
-					timestamp  time.Time
-					valueIndex int
-				}{}
-			}
-
-			coordinateGroups[coordKey] = append(coordinateGroups[coordKey], struct {
-				timestamp  time.Time
-				valueIndex int
-			}{timestamp, i / 3})
-		}
-	}
-
-	if debug {
-		log.Printf("Found %d unique coordinates, %d stations in list", len(uniqueCoords), len(stationList))
-	}
-
-	// Map coordinate groups to station IDs by order
-	for i, coordKey := range uniqueCoords {
-		if i >= len(stationList) {
-			break // More coordinates than stations
-		}
-
-		stationID := stationList[i]
-		timePoints := coordinateGroups[coordKey]
-		observations := []WindObservation{}
-
-		// Extract wind data for this station
-		for _, tp := range timePoints {
-			if tp.valueIndex < len(valueLines) {
-				windValues := strings.Fields(strings.TrimSpace(valueLines[tp.valueIndex]))
-				if len(windValues) >= 3 {
-					windSpeed := parseFloat(windValues[0])
-					windGust := parseFloat(windValues[1])
-					windDirection := parseFloat(windValues[2])
-
-					// Filter out invalid observations
-					if windSpeed >= 0 && windSpeed < 100 && windDirection >= 0 && windDirection <= 360 {
-						obs := WindObservation{
-							Timestamp:     tp.timestamp,
-							WindSpeed:     windSpeed,
-							WindGust:      windGust,
-							WindDirection: windDirection,
-						}
-						observations = append(observations, obs)
-					}
-				}
-			}
-		}
-
-		if len(observations) > 0 {
-			results[stationID] = observations
-		}
-	}
-
-	return results
-}
-
-// parseMultiStationDataWithMap removed - replaced by parseMultiStationDataByOrder
 
 // Wind observation from FMI
 type WindObservation struct {
@@ -579,40 +432,34 @@ type WindObservation struct {
 }
 
 // Update polling state based on results
-func updatePollingState(stationID string, observations []WindObservation) {
-	pollingStatesMutex.Lock()
-	defer pollingStatesMutex.Unlock()
-
-	state := pollingStates[stationID]
-	if state == nil {
-		return
-	}
+func updatePollingState(state *StationPollingState, observations []WindObservation) (
+	WindObservation, bool) {
 
 	state.LastPolled = time.Now()
 	state.TotalPolls++
 
+	var lastObservation WindObservation
+	hadData := false
+
 	if len(observations) > 0 {
+
+		hadData = true
+		lastObservation = observations[len(observations)-1]
+
 		// Success - we got data
 		state.SuccessfulPolls++
 		state.ConsecutiveMisses = 0
-		state.LastObservation = observations[len(observations)-1].Timestamp
+		state.LastObservation = lastObservation.Timestamp
 		state.SuccessRate = float64(state.SuccessfulPolls) / float64(state.TotalPolls)
 
 		// Analyze observation intervals and adapt
 		if len(observations) >= 2 {
-			minInterval := analyzeObservationIntervals(observations)
-			if minInterval < state.CurrentInterval {
+			minInterval, ok := analyzeObservationIntervals(observations)
+			if ok && minInterval < state.CurrentInterval {
 				// Speed up polling to match data frequency
 				state.CurrentInterval = roundToStandardInterval(minInterval)
-				if *debug {
-					log.Printf("Station %s: speeding up to %v interval", stationID, state.CurrentInterval)
-				}
 			}
 		}
-
-		// Update wind data and broadcast
-		latest := observations[len(observations)-1]
-		updateWindData(stationID, latest)
 
 	} else {
 		// No data - increment misses
@@ -621,21 +468,17 @@ func updatePollingState(stationID string, observations []WindObservation) {
 
 		// Back off after 2 consecutive misses
 		if state.ConsecutiveMisses >= 2 {
-			oldInterval := state.CurrentInterval
 			state.CurrentInterval = getNextSlowerInterval(state.CurrentInterval)
 			state.ConsecutiveMisses = 0
-
-			if *debug && oldInterval != state.CurrentInterval {
-				log.Printf("Station %s: backing off to %v interval", stationID, state.CurrentInterval)
-			}
 		}
 	}
+	return lastObservation, hadData
 }
 
 // Analyze observation intervals to detect publishing frequency
-func analyzeObservationIntervals(observations []WindObservation) time.Duration {
+func analyzeObservationIntervals(observations []WindObservation) (time.Duration, bool) {
 	if len(observations) < 2 {
-		return IntervalMedium
+		return IntervalFast, false
 	}
 
 	intervals := []time.Duration{}
@@ -648,7 +491,7 @@ func analyzeObservationIntervals(observations []WindObservation) time.Duration {
 	}
 
 	if len(intervals) == 0 {
-		return IntervalMedium
+		return IntervalFast, false
 	}
 
 	// Find minimum interval
@@ -659,7 +502,7 @@ func analyzeObservationIntervals(observations []WindObservation) time.Duration {
 		}
 	}
 
-	return minInterval
+	return minInterval, true
 }
 
 // Round to standard interval
@@ -671,7 +514,7 @@ func roundToStandardInterval(d time.Duration) time.Duration {
 	} else if d <= 70*time.Minute {
 		return IntervalSlow
 	}
-	return IntervalMinimal
+	return IntervalUltraSlow
 }
 
 // Get next slower interval for backoff
@@ -682,9 +525,9 @@ func getNextSlowerInterval(current time.Duration) time.Duration {
 	case IntervalMedium:
 		return IntervalSlow
 	case IntervalSlow:
-		return IntervalMinimal
+		return IntervalUltraSlow
 	default:
-		return IntervalMinimal
+		return IntervalUltraSlow
 	}
 }
 
@@ -794,7 +637,7 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 		close(clientChan)
 	}()
 
-	// Send initial data
+	// Send initial data and status
 	windDataMutex.RLock()
 	for _, reading := range windData {
 		clientChan <- SSEMessage{
@@ -805,6 +648,22 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	windDataMutex.RUnlock()
+
+	// Send initial status for all stations
+	pollingStatesMutex.RLock()
+	for stationID, state := range pollingStates {
+		clientChan <- SSEMessage{
+			Type:      "status",
+			StationID: stationID,
+			StationStatus: &StationStatus{
+				Interval:    formatInterval(state.CurrentInterval),
+				SuccessRate: state.SuccessRate,
+				LastPolled:  state.LastPolled,
+			},
+			Timestamp: time.Now(),
+		}
+	}
+	pollingStatesMutex.RUnlock()
 
 	// Get flusher
 	flusher, ok := w.(http.Flusher)
@@ -863,7 +722,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 			active++
 		case IntervalSlow:
 			slow++
-		case IntervalMinimal:
+		case IntervalUltraSlow:
 			offline++
 		}
 	}
@@ -924,7 +783,7 @@ func formatInterval(d time.Duration) string {
 		return "10m"
 	case IntervalSlow:
 		return "60m"
-	case IntervalMinimal:
+	case IntervalUltraSlow:
 		return "24h"
 	default:
 		return d.String()
@@ -1334,6 +1193,14 @@ const htmlContent = `<!DOCTYPE html>
             updateStats();
         }
 
+        function updateStationStatus(stationId, status) {
+            const row = stationRows.get(stationId);
+            if (!row || !row.cells[5]) return;
+
+            const statusInfo = getPollingStatus(status.interval);
+            row.cells[5].innerHTML = ` + "`" + `<span class="status-badge ${statusInfo.class}">${statusInfo.text}</span>` + "`" + `;
+        }
+
         function updateStats() {
             document.getElementById('station-count').textContent = stationData.size;
             document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
@@ -1372,6 +1239,17 @@ const htmlContent = `<!DOCTYPE html>
                     }
                 } catch (e) {
                     console.error('Error parsing SSE data:', e);
+                }
+            });
+
+            eventSource.addEventListener('status', function(event) {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.station_status) {
+                        updateStationStatus(msg.station_id, msg.station_status);
+                    }
+                } catch (e) {
+                    console.error('Error parsing SSE status:', e);
                 }
             });
 

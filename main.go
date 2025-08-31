@@ -1144,23 +1144,32 @@ const htmlContent = `<!DOCTYPE html>
             margin: 0 auto;
         }
 
-        header {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            padding: 20px 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        .status-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
         }
 
-        h1 {
-            color: #2d3748;
-            font-size: 28px;
-            margin-bottom: 10px;
+        .toggle-btn {
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .subtitle {
-            color: #718096;
-            font-size: 14px;
+        .toggle-btn:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
         }
 
         .status-bar {
@@ -1172,6 +1181,16 @@ const htmlContent = `<!DOCTYPE html>
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            min-width: 300px;
+            z-index: 999;
+        }
+
+        .status-bar.hidden {
+            display: none;
         }
 
         .status-item {
@@ -1345,6 +1364,23 @@ const htmlContent = `<!DOCTYPE html>
             .status-bar {
                 flex-direction: column;
                 gap: 10px;
+                position: relative;
+                top: auto;
+                right: auto;
+                min-width: auto;
+                width: calc(100% - 40px);
+                margin: 0 20px 20px 20px;
+            }
+
+            .status-toggle {
+                top: 10px;
+                right: 10px;
+            }
+
+            .toggle-btn {
+                width: 35px;
+                height: 35px;
+                font-size: 14px;
             }
 
             th, td {
@@ -1360,12 +1396,13 @@ const htmlContent = `<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>🌬️ Finnish Wind Monitor</h1>
-            <div class="subtitle">Real-time wind data from 16 coastal and maritime weather stations</div>
-        </header>
+        <div class="status-toggle">
+            <button id="status-toggle-btn" class="toggle-btn" onclick="toggleStatus()" title="Show/hide connection info">
+                <span class="toggle-icon">ℹ️</span>
+            </button>
+        </div>
 
-        <div class="status-bar">
+        <div class="status-bar" id="status-bar" style="display: none;">
             <div class="status-item">
                 <div class="status-indicator" id="connection-indicator"></div>
                 <span id="connection-status">Connecting...</span>
@@ -1637,6 +1674,18 @@ const htmlContent = `<!DOCTYPE html>
                 }
             });
         }, 30000);
+
+        // Toggle status bar visibility
+        function toggleStatus() {
+            const statusBar = document.getElementById('status-bar');
+            const isVisible = statusBar.style.display !== 'none';
+            
+            if (isVisible) {
+                statusBar.style.display = 'none';
+            } else {
+                statusBar.style.display = 'flex';
+            }
+        }
 
         // Periodically fetch status updates
         setInterval(fetchStationStatus, 60000);

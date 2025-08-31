@@ -334,42 +334,98 @@ func pollDueStations() {
 		log.Printf("Polling %d stations: %v", len(toPoll), toPoll)
 	}
 
-	// Poll the scheduled stations
+	// Group stations by their effective time windows for batching
+	const maxBatchSize = 20
+	endTime := time.Now()
+	defaultStartTime := endTime.Add(-2 * time.Hour)
+	
+	// Group stations by their effective start time
+	timeWindowGroups := make(map[time.Time][]*StationPollingState)
+	
 	for _, state := range toPoll {
-
-		endTime := time.Now()
-		startTime := endTime.Add(-2 * time.Hour)
-		if state.LastObservation.After(startTime) {
-			// start a bit after last observation
-			startTime = state.LastObservation.Add(time.Second)
+		effectiveStartTime := defaultStartTime
+		if state.LastObservation.After(defaultStartTime) {
+			// Round to second for grouping (stations within same second can be batched)
+			effectiveStartTime = state.LastObservation.Add(time.Second).Truncate(time.Second)
 		}
-
-		stationID := state.StationID
-
-		observations, err := fetchWindData(state.StationID, startTime, endTime)
-		if err != nil {
-			log.Printf("Error fetching wind data for station %s: %v", stationID, err)
-			continue
+		
+		timeWindowGroups[effectiveStartTime] = append(timeWindowGroups[effectiveStartTime], state)
+	}
+	
+	// Process each time window group in batches of up to 20 stations
+	for groupStartTime, groupStations := range timeWindowGroups {
+		if *debug && len(groupStations) > 1 {
+			log.Printf("Time window group (start: %v) has %d stations - batching opportunity", 
+				groupStartTime.Format("15:04:05"), len(groupStations))
 		}
+		
+		// Process this time window group in batches
+		for i := 0; i < len(groupStations); i += maxBatchSize {
+			// Create batch of up to 20 stations with same time window
+			end := i + maxBatchSize
+			if end > len(groupStations) {
+				end = len(groupStations)
+			}
+			batch := groupStations[i:end]
+			
+			// Collect station IDs for batch request
+			stationIDs := make([]string, len(batch))
+			for j, state := range batch {
+				stationIDs[j] = state.StationID
+			}
+			
+			// Execute batch request with the group's time window
+			if *debug {
+				log.Printf("Fetching batch of %d stations (time window: %v-%v): %v", 
+					len(stationIDs), groupStartTime.Format("15:04:05"), endTime.Format("15:04:05"), stationIDs)
+			}
+			
+			batchResults, err := fetchWindDataBatch(stationIDs, groupStartTime, endTime)
+			if err != nil {
+				log.Printf("Error fetching wind data for batch of %d stations: %v", len(stationIDs), err)
+				// Mark all stations in this batch as failed
+				for _, state := range batch {
+					state.TotalPolls++
+					state.ConsecutiveMisses++
+					state.LastPolled = time.Now()
+					// Slow down polling on consecutive failures
+					if state.ConsecutiveMisses >= 3 {
+						state.CurrentInterval = getNextSlowerInterval(state.CurrentInterval)
+					}
+				}
+				continue
+			}
+			
+			// Process results for each station in the batch
+			for _, state := range batch {
+				stationID := state.StationID
+				observations, hasObservations := batchResults[stationID]
+				
+				// If station not in results, treat as empty response (not error)
+				if !hasObservations {
+					observations = []WindObservation{}
+				}
+				
+				oldInterval := state.CurrentInterval
+				latestObservation, hasData := updatePollingState(state, observations)
 
-		oldInterval := state.CurrentInterval
-		latestObservation, hasData := updatePollingState(state, observations)
+				if oldInterval != state.CurrentInterval {
+					broadcastSSE(SSEMessage{
+						Type:      "status",
+						StationID: stationID,
+						StationStatus: &StationStatus{
+							Interval:    formatInterval(state.CurrentInterval),
+							SuccessRate: state.SuccessRate,
+							LastPolled:  state.LastPolled,
+						},
+						Timestamp: time.Now(),
+					})
+				}
 
-		if oldInterval != state.CurrentInterval {
-			broadcastSSE(SSEMessage{
-				Type:      "status",
-				StationID: stationID,
-				StationStatus: &StationStatus{
-					Interval:    formatInterval(state.CurrentInterval),
-					SuccessRate: state.SuccessRate,
-					LastPolled:  state.LastPolled,
-				},
-				Timestamp: time.Now(),
-			})
-		}
-
-		if hasData {
-			updateWindData(stationID, latestObservation)
+				if hasData {
+					updateWindData(stationID, latestObservation)
+				}
+			}
 		}
 	}
 
@@ -377,33 +433,57 @@ func pollDueStations() {
 }
 
 // Fetch wind data from FMI API
-// fetchWindData fetches wind data using the new observations package
+// fetchWindData fetches wind data using the new observations package (legacy single-station function)
 func fetchWindData(stationID string, startTime, endTime time.Time) (result []WindObservation, err error) {
-	// Create observations query with default HTTP client
-	query := observations.NewQuery("https://opendata.fmi.fi/wfs", &http.Client{Timeout: 30 * time.Second})
+	// Use the new batched function for single station
+	stationResults, err := fetchWindDataBatch([]string{stationID}, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Return results for the requested station
+	if results, found := stationResults[stationID]; found {
+		return results, nil
+	}
+	
+	return []WindObservation{}, nil
+}
 
-	// Create request for specific station
+// fetchWindDataBatch fetches wind data for multiple stations in a single API call
+func fetchWindDataBatch(stationIDs []string, startTime, endTime time.Time) (map[string][]WindObservation, error) {
+	if len(stationIDs) == 0 {
+		return make(map[string][]WindObservation), nil
+	}
+
+	// Create observations query with default HTTP client
+	query := observations.NewQuery("https://opendata.fmi.fi/wfs", &http.Client{Timeout: 60 * time.Second})
+
+	// Create request for multiple stations
 	req := observations.Request{
 		StartTime:  startTime,
 		EndTime:    endTime,
-		StationIDs: []string{stationID},
+		StationIDs: stationIDs,
 		UseGzip:    true,
 	}
 
 	// Execute query
 	response, err := query.Execute(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch wind data: %w", err)
+		return nil, fmt.Errorf("failed to fetch wind data for %d stations: %w", len(stationIDs), err)
 	}
 
 	if *debug {
-		log.Printf("FMI processing completed: %d stations, %d total observations",
-			len(response.Stations), response.Stats.ProcessedObservations)
+		log.Printf("FMI batch processing completed: %d stations requested, %d stations returned, %d total observations",
+			len(stationIDs), len(response.Stations), response.Stats.ProcessedObservations)
 	}
 
+	// Create result map indexed by station ID
+	results := make(map[string][]WindObservation)
+	
 	// Convert observations data to our WindObservation format
-	result = make([]WindObservation, 0)
 	for _, station := range response.Stations {
+		stationResults := make([]WindObservation, 0, len(station.Observations))
+		
 		for _, obs := range station.Observations {
 			windObs := WindObservation{
 				Timestamp: obs.Timestamp,
@@ -422,12 +502,14 @@ func fetchWindData(stationID string, startTime, endTime time.Time) (result []Win
 
 			// Only include observations with valid wind speed
 			if windObs.WindSpeed >= 0 && windObs.WindSpeed < 100 {
-				result = append(result, windObs)
+				stationResults = append(stationResults, windObs)
 			}
 		}
+		
+		results[station.StationID] = stationResults
 	}
 
-	return result, nil
+	return results, nil
 }
 
 // Wind observation from FMI

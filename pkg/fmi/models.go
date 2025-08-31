@@ -47,7 +47,6 @@ type Coordinates struct {
 	Region string  `json:"region,omitempty"`
 }
 
-
 // ProcessingStats provides summary of streaming operation
 type ProcessingStats struct {
 	TotalObservations     int           `json:"total_observations"`
@@ -119,7 +118,6 @@ type WindDataCallbacks struct {
 	// OnComplete called when streaming is complete with final stats
 	OnComplete func(stats ProcessingStats)
 }
-
 
 // Legacy XML parsing types for stations (TODO: Remove when client.go updated)
 
@@ -343,4 +341,3 @@ func NewStationGroupingParser(reader io.Reader, callbacks WindDataCallbacks) *De
 func ParseMultiStationResponseWithGzip(reader io.Reader, isGzipped bool) ([]StationWindData, error) {
 	return nil, fmt.Errorf("ParseMultiStationResponseWithGzip is deprecated - use pkg/fmi/observations package instead")
 }
-

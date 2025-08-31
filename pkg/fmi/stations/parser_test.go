@@ -37,7 +37,7 @@ func TestParseStationsXML(t *testing.T) {
 
 	parser := NewParser()
 	reader := strings.NewReader(testXML)
-	
+
 	response, err := parser.ParseXML(reader)
 	if err != nil {
 		t.Fatalf("Failed to parse stations XML: %v", err)

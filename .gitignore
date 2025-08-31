@@ -1,9 +1,14 @@
 # Binaries
 windz-monitor
+windz
+windz-*
 *.exe
 
 # State files
 polling_state.json
+
+# Deployment configuration
+deploy.env
 
 # OS files
 .DS_Store

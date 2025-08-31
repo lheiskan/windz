@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"windz-monitor/pkg/fmi"
+	"windz-monitor/pkg/fmi/observations"
 )
 
 // Station represents a weather station
@@ -377,50 +377,57 @@ func pollDueStations() {
 }
 
 // Fetch wind data from FMI API
-// fetchWindData fetches wind data using the FMI library
+// fetchWindData fetches wind data using the new observations package
 func fetchWindData(stationID string, startTime, endTime time.Time) (result []WindObservation, err error) {
-
-	// Use FMI library for clean multi-station data fetching
-	callbacks := fmi.WindDataCallbacks{
-
-		OnStationData: func(stationData fmi.StationWindData) error {
-			// Convert FMI observations to our WindObservation format
-			result = make([]WindObservation, 0, len(stationData.Observations))
-			for _, obs := range stationData.Observations {
-				windObs := WindObservation{
-					Timestamp: obs.Timestamp,
-				}
-
-				// Convert FMI float pointers to our float64 values
-				if obs.WindSpeed != nil {
-					windObs.WindSpeed = *obs.WindSpeed
-				}
-				if obs.WindGust != nil {
-					windObs.WindGust = *obs.WindGust
-				}
-				if obs.WindDirection != nil {
-					windObs.WindDirection = *obs.WindDirection
-				}
-
-				// Only include observations with valid wind speed
-				if windObs.WindSpeed >= 0 && windObs.WindSpeed < 100 {
-					result = append(result, windObs)
-				}
-			}
-
-			return nil
-		},
-		OnComplete: func(stats fmi.ProcessingStats) {
-			if *debug {
-				log.Printf("FMI processing completed: %d stations, %d observations in %v",
-					stats.StationCount, stats.ProcessedObservations, stats.Duration)
-			}
-		},
+	// Create observations query with default HTTP client  
+	query := observations.NewQuery("https://opendata.fmi.fi/wfs", &http.Client{Timeout: 30 * time.Second})
+	
+	// Create request for specific station
+	req := observations.Request{
+		StartTime:  startTime,
+		EndTime:    endTime,
+		StationIDs: []string{stationID},
+		UseGzip:    true,
 	}
+	
+	// Execute query
+	response, err := query.Execute(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch wind data: %w", err)
+	}
+	
+	if *debug {
+		log.Printf("FMI processing completed: %d stations, %d total observations", 
+			len(response.Stations), response.Stats.ProcessedObservations)
+	}
+	
+	// Convert observations data to our WindObservation format
+	result = make([]WindObservation, 0)
+	for _, station := range response.Stations {
+		for _, obs := range station.Observations {
+			windObs := WindObservation{
+				Timestamp: obs.Timestamp,
+			}
 
-	err = fmiClient.StreamWindDataStations(stationID, startTime, endTime, callbacks)
+			// Convert FMI float pointers to our float64 values
+			if obs.WindSpeed != nil {
+				windObs.WindSpeed = *obs.WindSpeed
+			}
+			if obs.WindGust != nil {
+				windObs.WindGust = *obs.WindGust
+			}
+			if obs.WindDirection != nil {
+				windObs.WindDirection = *obs.WindDirection
+			}
 
-	return
+			// Only include observations with valid wind speed
+			if windObs.WindSpeed >= 0 && windObs.WindSpeed < 100 {
+				result = append(result, windObs)
+			}
+		}
+	}
+	
+	return result, nil
 }
 
 // Wind observation from FMI
@@ -791,7 +798,6 @@ func formatInterval(d time.Duration) string {
 }
 
 var startTime = time.Now()
-var fmiClient = fmi.NewClient()
 
 // Embedded HTML content
 const htmlContent = `<!DOCTYPE html>

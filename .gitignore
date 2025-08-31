@@ -6,6 +6,7 @@ windz-*
 
 # State files
 polling_state.json
+wind_data.json
 
 # Deployment configuration
 deploy.env

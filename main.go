@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"flag"
 	"fmt"
+	"html/template"
 	"log"
 	"math"
 	"net/http"
@@ -134,9 +135,10 @@ var (
 	perfMetricsMutex sync.RWMutex
 
 	// Configuration
-	port      = flag.Int("port", 8080, "HTTP server port")
-	stateFile = flag.String("state-file", "polling_state.json", "Polling state persistence file")
-	debug     = flag.Bool("debug", false, "Enable debug logging")
+	port         = flag.Int("port", 8080, "HTTP server port")
+	stateFile    = flag.String("state-file", "polling_state.json", "Polling state persistence file")
+	windDataFile = flag.String("wind-data-file", "wind_data.json", "Wind data cache persistence file")
+	debug        = flag.Bool("debug", false, "Enable debug logging")
 )
 
 // FMI XML structures for parsing
@@ -228,8 +230,9 @@ func main() {
 	log.Printf("WindZ Monitor starting on port %d", *port)
 	log.Printf("Monitoring %d Finnish weather stations", len(stations))
 
-	// Initialize polling states
+	// Initialize polling states and wind data cache
 	loadPollingStates()
+	loadWindData()
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -260,6 +263,7 @@ func main() {
 		log.Println("Shutting down...")
 		cancel()
 		savePollingStates()
+		saveWindData()
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -307,6 +311,42 @@ func savePollingStates() {
 
 	if err := os.WriteFile(*stateFile, data, 0644); err != nil {
 		log.Printf("Error saving polling states: %v", err)
+	}
+}
+
+// Load wind data cache from file
+func loadWindData() {
+	data, err := os.ReadFile(*windDataFile)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Error loading wind data: %v", err)
+		}
+		return
+	}
+
+	windDataMutex.Lock()
+	defer windDataMutex.Unlock()
+	if err := json.Unmarshal(data, &windData); err != nil {
+		log.Printf("Error parsing wind data: %v", err)
+		return
+	}
+
+	log.Printf("Loaded wind data for %d stations", len(windData))
+}
+
+// Save wind data cache to file
+func saveWindData() {
+	windDataMutex.RLock()
+	data, err := json.MarshalIndent(windData, "", "  ")
+	windDataMutex.RUnlock()
+
+	if err != nil {
+		log.Printf("Error marshaling wind data: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(*windDataFile, data, 0644); err != nil {
+		log.Printf("Error saving wind data: %v", err)
 	}
 }
 
@@ -789,7 +829,79 @@ func parseFloat(s string) float64 {
 // Handle main page
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, htmlContent)
+
+	// Gather current wind data and station info
+	windDataMutex.RLock()
+	windDataCopy := make(map[string]*WindReading)
+	for k, v := range windData {
+		windDataCopy[k] = v
+	}
+	windDataMutex.RUnlock()
+
+	// Get polling states for status information
+	pollingStatesMutex.RLock()
+	pollingStatesCopy := make(map[string]*StationPollingState)
+	for k, v := range pollingStates {
+		pollingStatesCopy[k] = v
+	}
+	pollingStatesMutex.RUnlock()
+
+	// Create template data with stations and their current readings
+	type StationRowData struct {
+		Station
+		WindData     *WindReading
+		PollingState *StationPollingState
+	}
+
+	var stationRows []StationRowData
+	for _, station := range stations {
+		stationRows = append(stationRows, StationRowData{
+			Station:      station,
+			WindData:     windDataCopy[station.ID],
+			PollingState: pollingStatesCopy[station.ID],
+		})
+	}
+
+	templateData := struct {
+		Stations []StationRowData
+	}{
+		Stations: stationRows,
+	}
+
+	// Parse and execute template
+	tmpl, err := template.New("index").Funcs(template.FuncMap{
+		"formatWindSpeed": func(speed *float64) string {
+			if speed == nil || *speed < 0 {
+				return "-"
+			}
+			return fmt.Sprintf("%.1f m/s", *speed)
+		},
+		"formatDirection": func(degrees *float64) string {
+			if degrees == nil || *degrees < 0 {
+				return "-"
+			}
+			directions := []string{"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+				"S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"}
+			index := int((*degrees+11.25)/22.5) % 16
+			return fmt.Sprintf("%.0f° %s", *degrees, directions[index])
+		},
+		"formatTime": func(t time.Time) string {
+			if t.IsZero() {
+				return "-"
+			}
+			return t.Format("15:04")
+		},
+		"formatInterval": formatInterval,
+	}).Parse(htmlContent)
+	if err != nil {
+		http.Error(w, "Template error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, templateData); err != nil {
+		http.Error(w, "Template execution error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // Handle SSE connections
@@ -1278,9 +1390,31 @@ const htmlContent = `<!DOCTYPE html>
                     </tr>
                 </thead>
                 <tbody id="wind-data">
-                    <tr>
-                        <td colspan="6" class="loading">Loading wind data...</td>
+                    {{range .Stations}}
+                    <tr id="station-{{.ID}}">
+                        <td>
+                            <div class="station-name">{{.Name}}</div>
+                            <div class="region">{{.Region}}</div>
+                        </td>
+                        <td class="wind-speed{{if not .WindData}} no-data{{end}}">
+                            {{if .WindData}}{{formatWindSpeed .WindData.WindSpeed}}{{else}}-{{end}}
+                        </td>
+                        <td class="wind-gust{{if not .WindData}} no-data{{end}}">
+                            {{if .WindData}}{{formatWindSpeed .WindData.WindGust}}{{else}}-{{end}}
+                        </td>
+                        <td class="wind-direction{{if not .WindData}} no-data{{end}}">
+                            {{if .WindData}}{{formatDirection .WindData.WindDirection}}{{else}}-{{end}}
+                        </td>
+                        <td class="updated{{if not .WindData}} no-data{{end}}">
+                            {{if .WindData}}{{formatTime .WindData.UpdatedAt}}{{else}}-{{end}}
+                        </td>
+                        <td class="status">
+                            <span class="status-badge {{if not .PollingState}}offline{{else}}{{$interval := formatInterval .PollingState.CurrentInterval}}{{if or (eq $interval "1m") (eq $interval "10m")}}active{{else if eq $interval "60m"}}slow{{else}}offline{{end}}{{end}}">
+                                {{if .PollingState}}{{formatInterval .PollingState.CurrentInterval}}{{else}}offline{{end}}
+                            </span>
+                        </td>
                     </tr>
+                    {{end}}
                 </tbody>
             </table>
         </div>

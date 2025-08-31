@@ -379,9 +379,9 @@ func pollDueStations() {
 // Fetch wind data from FMI API
 // fetchWindData fetches wind data using the new observations package
 func fetchWindData(stationID string, startTime, endTime time.Time) (result []WindObservation, err error) {
-	// Create observations query with default HTTP client  
+	// Create observations query with default HTTP client
 	query := observations.NewQuery("https://opendata.fmi.fi/wfs", &http.Client{Timeout: 30 * time.Second})
-	
+
 	// Create request for specific station
 	req := observations.Request{
 		StartTime:  startTime,
@@ -389,18 +389,18 @@ func fetchWindData(stationID string, startTime, endTime time.Time) (result []Win
 		StationIDs: []string{stationID},
 		UseGzip:    true,
 	}
-	
+
 	// Execute query
 	response, err := query.Execute(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch wind data: %w", err)
 	}
-	
+
 	if *debug {
-		log.Printf("FMI processing completed: %d stations, %d total observations", 
+		log.Printf("FMI processing completed: %d stations, %d total observations",
 			len(response.Stations), response.Stats.ProcessedObservations)
 	}
-	
+
 	// Convert observations data to our WindObservation format
 	result = make([]WindObservation, 0)
 	for _, station := range response.Stations {
@@ -426,7 +426,7 @@ func fetchWindData(stationID string, startTime, endTime time.Time) (result []Win
 			}
 		}
 	}
-	
+
 	return result, nil
 }
 

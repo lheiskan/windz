@@ -61,4 +61,3 @@ const (
 	WindGustMS    WindParameter = "windgust"
 	WindDirection WindParameter = "winddirection"
 )
-

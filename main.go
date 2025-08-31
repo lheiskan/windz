@@ -18,6 +18,13 @@ import (
 	"windz-monitor/pkg/fmi/observations"
 )
 
+// Build metadata - injected at build time
+var (
+	BuildDate    = "unknown"
+	BuildCommit  = "unknown"
+	BuildVersion = "dev"
+)
+
 // Station represents a weather station
 type Station struct {
 	ID     string
@@ -906,6 +913,13 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
+		// Build information
+		"build": map[string]interface{}{
+			"version": BuildVersion,
+			"commit":  BuildCommit,
+			"date":    BuildDate,
+		},
+
 		// Existing polling metrics
 		"stations_active":  active,
 		"stations_slow":    slow,

@@ -1,7 +1,12 @@
 # WindZ Monitor Build Configuration
 
-# Go build flags for optimized binaries
-LDFLAGS = -ldflags="-s -w"
+# Build metadata
+BUILD_DATE := $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
+BUILD_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+# Go build flags for optimized binaries with build metadata
+LDFLAGS = -ldflags="-s -w -X 'main.BuildDate=$(BUILD_DATE)' -X 'main.BuildCommit=$(BUILD_COMMIT)' -X 'main.BuildVersion=$(BUILD_VERSION)'"
 
 # Default target
 .PHONY: all

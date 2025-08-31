@@ -1,4 +1,5 @@
-package fmi
+// @vibe: 🤖 -- ai
+package stations
 
 import (
 	"encoding/xml"
@@ -8,10 +9,43 @@ import (
 	"time"
 )
 
-// parseStationXML parses the XML response from FMI stations query
-func parseStationXML(reader io.Reader, response *WFSStationResponse) error {
+// Parser handles parsing of FMI station XML responses
+type Parser struct{}
+
+// NewParser creates a new stations parser
+func NewParser() *Parser {
+	return &Parser{}
+}
+
+// Parse parses a stations XML response
+func (p *Parser) Parse(reader io.Reader) (*Response, error) {
+	return p.parseXML(reader)
+}
+
+// ParseXML parses the XML content directly
+func (p *Parser) ParseXML(reader io.Reader) (*Response, error) {
+	return p.parseXML(reader)
+}
+
+func (p *Parser) parseXML(reader io.Reader) (*Response, error) {
+	var wfsResponse WFSStationResponse
 	decoder := xml.NewDecoder(reader)
-	return decoder.Decode(response)
+	if err := decoder.Decode(&wfsResponse); err != nil {
+		return nil, err
+	}
+
+	// Convert to our Station model
+	stations := make([]Station, 0, len(wfsResponse.Members))
+	for _, member := range wfsResponse.Members {
+		if station := convertToStationModel(member); station != nil {
+			stations = append(stations, *station)
+		}
+	}
+
+	return &Response{
+		Stations: stations,
+		Count:    len(stations),
+	}, nil
 }
 
 // convertToStationModel converts FMI XML data to our Station model
@@ -132,14 +166,4 @@ func isNumeric(s string) bool {
 		}
 	}
 	return true
-}
-
-// GetDefaultWindCapabilities returns a default set of wind measurement capabilities
-// This is used when we can't determine actual capabilities from API responses
-func GetDefaultWindCapabilities() []string {
-	return []string{
-		"WS_PT1H_AVG", // Wind speed (hourly average)
-		"WD_PT1H_AVG", // Wind direction (hourly average)
-		"WG_PT1H_MAX", // Wind gust (hourly maximum)
-	}
 }

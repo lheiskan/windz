@@ -48,7 +48,7 @@ Handles weather observation data from FMI's `fmi::observations::weather::multipo
 
 **Usage:**
 ```go
-import "windz-monitor/pkg/fmi/observations"
+import "windz/pkg/fmi/observations"
 
 // Create query handler
 query := observations.NewQuery("https://opendata.fmi.fi/wfs", httpClient)

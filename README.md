@@ -18,16 +18,16 @@ A high-performance wind monitoring application for Finnish weather stations with
 
 ```bash
 # Build
-go build -o windz-monitor
+go build -o windz
 
 # Run with defaults (port 8080)
-./windz-monitor
+./windz
 
 # Run with custom port
-./windz-monitor -port 9000
+./windz -port 9000
 
 # Enable debug logging
-./windz-monitor -debug
+./windz -debug
 ```
 
 Visit http://localhost:8080 to view the wind data dashboard.
@@ -113,12 +113,12 @@ WINDZ_STATE_FILE=/var/lib/windz/state.json
 
 ```bash
 # Optimized binary
-go build -ldflags="-s -w" -o windz-monitor
+go build -ldflags="-s -w" -o windz
 
 # Cross-compilation
-GOOS=linux GOARCH=amd64 go build -o windz-monitor-linux
-GOOS=darwin GOARCH=arm64 go build -o windz-monitor-darwin
-GOOS=windows GOARCH=amd64 go build -o windz-monitor.exe
+GOOS=linux GOARCH=amd64 go build -o windz-linux
+GOOS=darwin GOARCH=arm64 go build -o windz-darwin
+GOOS=windows GOARCH=amd64 go build -o windz.exe
 ```
 
 ## Docker Deployment
@@ -127,18 +127,18 @@ GOOS=windows GOARCH=amd64 go build -o windz-monitor.exe
 FROM golang:1.24-alpine AS builder
 WORKDIR /app
 COPY . .
-RUN go build -ldflags="-s -w" -o windz-monitor
+RUN go build -ldflags="-s -w" -o windz
 
 FROM alpine:latest
 RUN apk add --no-cache ca-certificates
-COPY --from=builder /app/windz-monitor /
+COPY --from=builder /app/windz /
 EXPOSE 8080
-CMD ["/windz-monitor"]
+CMD ["/windz"]
 ```
 
 ```bash
-docker build -t windz-monitor .
-docker run -p 8080:8080 windz-monitor
+docker build -t windz .
+docker run -p 8080:8080 windz
 ```
 
 ## Systemd Service
@@ -151,8 +151,8 @@ After=network.target
 [Service]
 Type=simple
 User=windz
-WorkingDirectory=/opt/windz-monitor
-ExecStart=/opt/windz-monitor/windz-monitor
+WorkingDirectory=/opt/windz
+ExecStart=/opt/windz/windz
 Restart=always
 RestartSec=10
 StandardOutput=journal

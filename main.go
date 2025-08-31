@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"windz-monitor/pkg/fmi/observations"
+	"windz/pkg/fmi/observations"
 )
 
 // Build metadata - injected at build time

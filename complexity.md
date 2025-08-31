@@ -166,7 +166,7 @@ Top 10 longest functions (lines of code):
 
 1. **Create Project Structure**
    ```
-   windz-monitor/
+   windz/
    ├── cmd/windz/main.go         (< 100 lines)
    ├── internal/
    │   ├── handlers/             (HTTP handlers)

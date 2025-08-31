@@ -338,27 +338,27 @@ func pollDueStations() {
 	const maxBatchSize = 20
 	endTime := time.Now()
 	defaultStartTime := endTime.Add(-2 * time.Hour)
-	
+
 	// Group stations by their effective start time
 	timeWindowGroups := make(map[time.Time][]*StationPollingState)
-	
+
 	for _, state := range toPoll {
 		effectiveStartTime := defaultStartTime
 		if state.LastObservation.After(defaultStartTime) {
 			// Round to second for grouping (stations within same second can be batched)
 			effectiveStartTime = state.LastObservation.Add(time.Second).Truncate(time.Second)
 		}
-		
+
 		timeWindowGroups[effectiveStartTime] = append(timeWindowGroups[effectiveStartTime], state)
 	}
-	
+
 	// Process each time window group in batches of up to 20 stations
 	for groupStartTime, groupStations := range timeWindowGroups {
 		if *debug && len(groupStations) > 1 {
-			log.Printf("Time window group (start: %v) has %d stations - batching opportunity", 
+			log.Printf("Time window group (start: %v) has %d stations - batching opportunity",
 				groupStartTime.Format("15:04:05"), len(groupStations))
 		}
-		
+
 		// Process this time window group in batches
 		for i := 0; i < len(groupStations); i += maxBatchSize {
 			// Create batch of up to 20 stations with same time window
@@ -367,19 +367,19 @@ func pollDueStations() {
 				end = len(groupStations)
 			}
 			batch := groupStations[i:end]
-			
+
 			// Collect station IDs for batch request
 			stationIDs := make([]string, len(batch))
 			for j, state := range batch {
 				stationIDs[j] = state.StationID
 			}
-			
+
 			// Execute batch request with the group's time window
 			if *debug {
-				log.Printf("Fetching batch of %d stations (time window: %v-%v): %v", 
+				log.Printf("Fetching batch of %d stations (time window: %v-%v): %v",
 					len(stationIDs), groupStartTime.Format("15:04:05"), endTime.Format("15:04:05"), stationIDs)
 			}
-			
+
 			batchResults, err := fetchWindDataBatch(stationIDs, groupStartTime, endTime)
 			if err != nil {
 				log.Printf("Error fetching wind data for batch of %d stations: %v", len(stationIDs), err)
@@ -395,17 +395,17 @@ func pollDueStations() {
 				}
 				continue
 			}
-			
+
 			// Process results for each station in the batch
 			for _, state := range batch {
 				stationID := state.StationID
 				observations, hasObservations := batchResults[stationID]
-				
+
 				// If station not in results, treat as empty response (not error)
 				if !hasObservations {
 					observations = []WindObservation{}
 				}
-				
+
 				oldInterval := state.CurrentInterval
 				latestObservation, hasData := updatePollingState(state, observations)
 
@@ -440,12 +440,12 @@ func fetchWindData(stationID string, startTime, endTime time.Time) (result []Win
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Return results for the requested station
 	if results, found := stationResults[stationID]; found {
 		return results, nil
 	}
-	
+
 	return []WindObservation{}, nil
 }
 
@@ -479,11 +479,11 @@ func fetchWindDataBatch(stationIDs []string, startTime, endTime time.Time) (map[
 
 	// Create result map indexed by station ID
 	results := make(map[string][]WindObservation)
-	
+
 	// Convert observations data to our WindObservation format
 	for _, station := range response.Stations {
 		stationResults := make([]WindObservation, 0, len(station.Observations))
-		
+
 		for _, obs := range station.Observations {
 			windObs := WindObservation{
 				Timestamp: obs.Timestamp,
@@ -505,7 +505,7 @@ func fetchWindDataBatch(stationIDs []string, startTime, endTime time.Time) (map[
 				stationResults = append(stationResults, windObs)
 			}
 		}
-		
+
 		results[station.StationID] = stationResults
 	}
 

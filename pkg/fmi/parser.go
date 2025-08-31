@@ -77,14 +77,23 @@ func (p *StationGroupingParser) Parse() error {
 func (p *StationGroupingParser) processFeatureMember(member FeatureMember) error {
 	obs := member.GridSeriesObservation
 
+	// Handle single station case (older format compatibility)
+	// For single station responses, extract from the first member
+	if len(obs.SpatialSamplingFeature.SampledFeature.Members) == 0 {
+		return fmt.Errorf("no station data found in observation")
+	}
+
+	// Get first location (for single station queries)
+	firstLocation := obs.SpatialSamplingFeature.SampledFeature.Members[0].Location
+
 	// Extract station information
-	stationID := obs.SpatialSamplingFeature.SampledFeature.Identifier.Value
+	stationID := firstLocation.Identifier.Value
 	if stationID == "" {
 		return fmt.Errorf("no station ID found in observation")
 	}
 
 	stationName := ""
-	for _, name := range obs.SpatialSamplingFeature.SampledFeature.Names {
+	for _, name := range firstLocation.Names {
 		if name.CodeSpace == "http://xml.fmi.fi/namespace/locationcode/name" {
 			stationName = name.Value
 			break
@@ -107,7 +116,7 @@ func (p *StationGroupingParser) processFeatureMember(member FeatureMember) error
 			Observations: make([]WindObservation, 0),
 			Metadata:     make(map[string]string),
 		}
-		stationData.Location.Region = obs.SpatialSamplingFeature.SampledFeature.Region
+		stationData.Location.Region = firstLocation.Region
 		p.stationData[stationID] = stationData
 		p.stats.StationCount++
 	}

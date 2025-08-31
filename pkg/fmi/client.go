@@ -60,11 +60,17 @@ type WindDataRequest struct {
 	// Specific station IDs to query (optional, overrides BBox)
 	StationID string
 
+	// Multiple station IDs for multi-station queries
+	StationIDs []string
+
 	// Wind parameters to fetch
 	Parameters []WindParameter
 
 	// Max number of observations per station (optional)
 	MaxObservations int
+
+	// Request gzip compressed response
+	UseGzip bool
 }
 
 // StreamWindDataByStation fetches wind data and streams results station by station
@@ -173,6 +179,79 @@ func (c *Client) StreamWindDataStations(stationID string, startTime, endTime tim
 		Parameters: []WindParameter{WindSpeedMS, WindGustMS, WindDirection},
 	}
 	return c.StreamWindDataByStation(req, callbacks)
+}
+
+// FetchMultiStationData fetches wind data for multiple stations
+func (c *Client) FetchMultiStationData(req WindDataRequest) ([]StationWindData, error) {
+	// Build query parameters
+	params := url.Values{}
+	params.Set("service", "WFS")
+	params.Set("version", "2.0.0")
+	params.Set("request", "getFeature")
+	params.Set("storedquery_id", "fmi::observations::weather::multipointcoverage")
+
+	// Set time range
+	params.Set("starttime", req.StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+	params.Set("endtime", req.EndTime.UTC().Format("2006-01-02T15:04:05Z"))
+
+	// Add station IDs
+	if len(req.StationIDs) > 0 {
+		for _, stationID := range req.StationIDs {
+			params.Add("fmisid", stationID)
+		}
+	} else if req.StationID != "" {
+		params.Set("fmisid", req.StationID)
+	} else if req.BBox != nil {
+		params.Set("bbox", req.BBox.String())
+	}
+
+	// Set parameters to fetch
+	if len(req.Parameters) > 0 {
+		paramStr := ""
+		for i, param := range req.Parameters {
+			if i > 0 {
+				paramStr += ","
+			}
+			paramStr += string(param)
+		}
+		params.Set("parameters", paramStr)
+	} else {
+		params.Set("parameters", "windspeedms,windgust,winddirection")
+	}
+
+	requestURL := fmt.Sprintf("%s?%s", c.baseURL, params.Encode())
+
+	// Create request
+	httpReq, err := http.NewRequest("GET", requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Request gzip encoding if specified
+	if req.UseGzip {
+		httpReq.Header.Set("Accept-Encoding", "gzip")
+	}
+
+	// Make HTTP request
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch data: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		if fmiError, err := parseFMIError(bytes.NewReader(bodyBytes)); err == nil {
+			return nil, fmt.Errorf("%s", fmiError)
+		}
+		return nil, fmt.Errorf("FMI API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Check if response is gzipped
+	isGzipped := resp.Header.Get("Content-Encoding") == "gzip"
+
+	// Parse the response
+	return ParseMultiStationResponseWithGzip(resp.Body, isGzipped)
 }
 
 // FetchStations retrieves available weather stations from FMI

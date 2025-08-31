@@ -1,4 +1,4 @@
-package fmi
+package observations
 
 import (
 	"encoding/xml"
@@ -127,96 +127,36 @@ type Point struct {
 
 // Result contains the observation results
 type Result struct {
-	RectifiedGridCoverage RectifiedGridCoverage `xml:"RectifiedGridCoverage"`
-	MultiPointCoverage    MultiPointCoverage    `xml:"MultiPointCoverage"`
+	MultiPointCoverage MultiPointCoverage `xml:"MultiPointCoverage"`
 }
 
-// RectifiedGridCoverage contains the grid coverage data
-type RectifiedGridCoverage struct {
-	GmlID      string    `xml:"id,attr"`
-	Limits     Limits    `xml:"limits"`
-	AxisLabels string    `xml:"axisLabels"`
-	DomainSet  DomainSet `xml:"domainSet"`
-	RangeSet   RangeSet  `xml:"rangeSet"`
-	RangeType  RangeType `xml:"rangeType"`
-}
-
-// Limits contains grid limits
-type Limits struct {
-	GridEnvelope GridEnvelope `xml:"GridEnvelope"`
-}
-
-// GridEnvelope contains grid envelope
-type GridEnvelope struct {
-	Low  string `xml:"low"`
-	High string `xml:"high"`
-}
-
-// DomainSet contains the domain set
-type DomainSet struct {
-	RectifiedGrid    RectifiedGrid    `xml:"RectifiedGrid"`
-	SimpleMultiPoint SimpleMultiPoint `xml:"SimpleMultiPoint"`
-}
-
-// RectifiedGrid contains rectified grid information
-type RectifiedGrid struct {
-	Dimension  string `xml:"dimension,attr"`
-	GmlID      string `xml:"id,attr"`
-	SrsName    string `xml:"srsName,attr"`
-	Limits     Limits `xml:"limits"`
-	AxisLabels string `xml:"axisLabels"`
-	Origin     Origin `xml:"origin"`
-}
-
-// Origin contains the origin point
-type Origin struct {
-	Point OriginPoint `xml:"Point"`
-}
-
-// OriginPoint represents the origin point
-type OriginPoint struct {
-	GmlID   string `xml:"id,attr"`
-	SrsName string `xml:"srsName,attr"`
-	Pos     string `xml:"pos"`
-}
-
-// RangeSet contains the range set data
-type RangeSet struct {
-	DataBlock DataBlock `xml:"DataBlock"`
-}
-
-// DataBlock contains the actual data values
-type DataBlock struct {
-	DoubleOrNilReasonTupleList string `xml:"doubleOrNilReasonTupleList"`
-}
-
-// RangeType contains range type information
-type RangeType struct {
-	DataRecord DataRecord `xml:"DataRecord"`
-}
-
-// DataRecord contains data record fields
-type DataRecord struct {
-	Fields []Field `xml:"field"`
-}
-
-// Field represents a data field
-type Field struct {
-	Name string `xml:"name,attr"`
-	Href string `xml:"href,attr"`
-}
-
-// SimpleMultiPoint contains position data
-type SimpleMultiPoint struct {
-	GmlID     string `xml:"id,attr"`
-	SrsName   string `xml:"srsName,attr"`
-	Positions string `xml:"positions"`
-}
-
-// MultiPointCoverage contains multi-point coverage data
+// MultiPointCoverage contains the observation data
 type MultiPointCoverage struct {
 	GmlID     string    `xml:"id,attr"`
 	DomainSet DomainSet `xml:"domainSet"`
 	RangeSet  RangeSet  `xml:"rangeSet"`
-	RangeType RangeType `xml:"rangeType"`
+}
+
+// DomainSet contains the domain information
+type DomainSet struct {
+	SimpleMultiPoint SimpleMultiPoint `xml:"SimpleMultiPoint"`
+}
+
+// SimpleMultiPoint contains position information
+type SimpleMultiPoint struct {
+	GmlID        string `xml:"id,attr"`
+	SrsName      string `xml:"srsName,attr"`
+	SrsDimension string `xml:"srsDimension,attr"`
+	Positions    string `xml:"positions"`
+}
+
+// RangeSet contains the data values
+type RangeSet struct {
+	DataBlock DataBlock `xml:"DataBlock"`
+}
+
+// DataBlock contains the actual observation data
+type DataBlock struct {
+	RangeParameters            string `xml:"rangeParameters"`
+	DoubleOrNilReasonTupleList string `xml:"doubleOrNilReasonTupleList"`
 }

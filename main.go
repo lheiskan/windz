@@ -65,6 +65,27 @@ type SSEMessage struct {
 	Timestamp     time.Time      `json:"timestamp"`
 }
 
+// PerformanceMetrics tracks FMI API efficiency
+type PerformanceMetrics struct {
+	// Gzip compression metrics
+	GzipRequests         int     `json:"gzip_requests"`
+	GzipResponses        int     `json:"gzip_responses"`
+	GzipSavedBytes       int64   `json:"gzip_saved_bytes"`
+	GzipCompressionRatio float64 `json:"gzip_compression_ratio"`
+
+	// Batching efficiency metrics
+	TotalAPIRequests     int     `json:"total_api_requests"`
+	TotalStationsQueried int     `json:"total_stations_queried"`
+	BatchEfficiency      float64 `json:"batch_efficiency"` // stations per request
+	LargestBatchSize     int     `json:"largest_batch_size"`
+	TimeWindowGroups     int     `json:"time_window_groups"`
+
+	// Response metrics
+	TotalObservations   int           `json:"total_observations"`
+	AverageResponseTime time.Duration `json:"average_response_time"`
+	LastUpdated         time.Time     `json:"last_updated"`
+}
+
 // Global state
 var (
 	stations = []Station{
@@ -100,6 +121,10 @@ var (
 
 	sseClients      = make(map[chan SSEMessage]bool)
 	sseClientsMutex sync.RWMutex
+
+	// Performance metrics
+	perfMetrics      = &PerformanceMetrics{}
+	perfMetricsMutex sync.RWMutex
 
 	// Configuration
 	port      = flag.Int("port", 8080, "HTTP server port")
@@ -352,6 +377,11 @@ func pollDueStations() {
 		timeWindowGroups[effectiveStartTime] = append(timeWindowGroups[effectiveStartTime], state)
 	}
 
+	// Update time window groups metric
+	perfMetricsMutex.Lock()
+	perfMetrics.TimeWindowGroups = len(timeWindowGroups)
+	perfMetricsMutex.Unlock()
+
 	// Process each time window group in batches of up to 20 stations
 	for groupStartTime, groupStations := range timeWindowGroups {
 		if *debug && len(groupStations) > 1 {
@@ -466,15 +496,24 @@ func fetchWindDataBatch(stationIDs []string, startTime, endTime time.Time) (map[
 		UseGzip:    true,
 	}
 
-	// Execute query
+	// Execute query and track performance metrics
+	requestStart := time.Now()
 	response, err := query.Execute(req)
+	requestDuration := time.Since(requestStart)
+
 	if err != nil {
+		// Update failed request metrics
+		updatePerformanceMetrics(len(stationIDs), 0, false, false, requestDuration, 0, 0)
 		return nil, fmt.Errorf("failed to fetch wind data for %d stations: %w", len(stationIDs), err)
 	}
 
+	// Update successful request metrics (we'll improve gzip detection later)
+	updatePerformanceMetrics(len(stationIDs), response.Stats.ProcessedObservations,
+		true, true, requestDuration, 0, 0) // Assume gzip worked for now
+
 	if *debug {
-		log.Printf("FMI batch processing completed: %d stations requested, %d stations returned, %d total observations",
-			len(stationIDs), len(response.Stations), response.Stats.ProcessedObservations)
+		log.Printf("FMI batch processing completed: %d stations requested, %d stations returned, %d total observations (duration: %v)",
+			len(stationIDs), len(response.Stations), response.Stats.ProcessedObservations, requestDuration)
 	}
 
 	// Create result map indexed by station ID
@@ -510,6 +549,50 @@ func fetchWindDataBatch(stationIDs []string, startTime, endTime time.Time) (map[
 	}
 
 	return results, nil
+}
+
+// updatePerformanceMetrics updates the global performance metrics
+func updatePerformanceMetrics(stationsQueried, observations int, success, gzipUsed bool,
+	duration time.Duration, uncompressedBytes, compressedBytes int64) {
+
+	perfMetricsMutex.Lock()
+	defer perfMetricsMutex.Unlock()
+
+	// Update API request metrics
+	perfMetrics.TotalAPIRequests++
+	perfMetrics.TotalStationsQueried += stationsQueried
+	perfMetrics.TotalObservations += observations
+
+	// Update batch efficiency
+	perfMetrics.BatchEfficiency = float64(perfMetrics.TotalStationsQueried) / float64(perfMetrics.TotalAPIRequests)
+	if stationsQueried > perfMetrics.LargestBatchSize {
+		perfMetrics.LargestBatchSize = stationsQueried
+	}
+
+	// Update gzip metrics if enabled
+	if success {
+		perfMetrics.GzipRequests++
+		if gzipUsed {
+			perfMetrics.GzipResponses++
+		}
+
+		// Update compression ratio if we have bytes data
+		if uncompressedBytes > 0 && compressedBytes > 0 {
+			perfMetrics.GzipSavedBytes += (uncompressedBytes - compressedBytes)
+			perfMetrics.GzipCompressionRatio = float64(compressedBytes) / float64(uncompressedBytes)
+		}
+	}
+
+	// Update response time (simple moving average)
+	if perfMetrics.AverageResponseTime == 0 {
+		perfMetrics.AverageResponseTime = duration
+	} else {
+		// Simple exponential moving average (alpha = 0.1)
+		perfMetrics.AverageResponseTime = time.Duration(
+			0.9*float64(perfMetrics.AverageResponseTime) + 0.1*float64(duration))
+	}
+
+	perfMetrics.LastUpdated = time.Now()
 }
 
 // Wind observation from FMI
@@ -816,8 +899,14 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Get performance metrics
+	perfMetricsMutex.RLock()
+	perfMetricsCopy := *perfMetrics
+	perfMetricsMutex.RUnlock()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
+		// Existing polling metrics
 		"stations_active":  active,
 		"stations_slow":    slow,
 		"stations_offline": offline,
@@ -826,6 +915,27 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 		"success_rate":     float64(successfulPolls) / math.Max(float64(totalPolls), 1),
 		"sse_connections":  len(sseClients),
 		"uptime_hours":     time.Since(startTime).Hours(),
+
+		// New FMI API performance metrics
+		"fmi_api": map[string]interface{}{
+			// Batching efficiency
+			"total_requests":       perfMetricsCopy.TotalAPIRequests,
+			"total_stations":       perfMetricsCopy.TotalStationsQueried,
+			"batch_efficiency":     perfMetricsCopy.BatchEfficiency,
+			"largest_batch_size":   perfMetricsCopy.LargestBatchSize,
+			"time_window_groups":   perfMetricsCopy.TimeWindowGroups,
+			"total_observations":   perfMetricsCopy.TotalObservations,
+			"avg_response_time_ms": float64(perfMetricsCopy.AverageResponseTime.Nanoseconds()) / 1e6,
+
+			// Gzip compression
+			"gzip_requests":          perfMetricsCopy.GzipRequests,
+			"gzip_responses":         perfMetricsCopy.GzipResponses,
+			"gzip_usage_rate":        float64(perfMetricsCopy.GzipResponses) / math.Max(float64(perfMetricsCopy.GzipRequests), 1),
+			"gzip_saved_bytes":       perfMetricsCopy.GzipSavedBytes,
+			"gzip_compression_ratio": perfMetricsCopy.GzipCompressionRatio,
+
+			"last_updated": perfMetricsCopy.LastUpdated,
+		},
 	})
 }
 

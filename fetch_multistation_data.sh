@@ -1,28 +1,85 @@
 #!/bin/bash
 
-# Script to fetch multi-station wind data from FMI API
-# Usage: ./fetch_multistation_data.sh [hours_back] [output_file]
+# @vibe: 🤖 fully-ai
+#
+# Script to fetch single or multi-station wind data from FMI API
+# Usage: 
+#   ./fetch_multistation_data.sh [station_id] [hours_back] [output_file]
+#   ./fetch_multistation_data.sh [hours_back] [output_file]
+#   ./fetch_multistation_data.sh -h | --help
 #
 # Examples:
-#   ./fetch_multistation_data.sh                    # Last 1 hour, saves to test_three_station_response.xml
-#   ./fetch_multistation_data.sh 2                  # Last 2 hours
-#   ./fetch_multistation_data.sh 1 my_data.xml      # Last 1 hour, saves to my_data.xml
-#   ./fetch_multistation_data.sh 24 daily_data.xml  # Last 24 hours
+#   ./fetch_multistation_data.sh                         # Last 1 hour, 3 default stations
+#   ./fetch_multistation_data.sh 2                       # Last 2 hours, 3 default stations
+#   ./fetch_multistation_data.sh 100996                  # Single station (Harmaja), 1 hour
+#   ./fetch_multistation_data.sh 100996 2                # Single station, 2 hours
+#   ./fetch_multistation_data.sh 100996 2 harmaja.xml    # Single station, 2 hours, custom file
+#   ./fetch_multistation_data.sh 24 daily.xml            # 3 default stations, 24 hours
 
-# Configuration
-HOURS_BACK=${1:-1}  # Default to 1 hour
-OUTPUT_FILE=${2:-"test_three_station_response.xml"}
+# Show help if requested
+if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+    echo "FMI Wind Data Fetcher - Fetch wind data from Finnish Meteorological Institute"
+    echo ""
+    echo "Usage:"
+    echo "  ./fetch_multistation_data.sh                      # Default: 3 stations, 1 hour"
+    echo "  ./fetch_multistation_data.sh [hours]              # 3 stations, custom hours"
+    echo "  ./fetch_multistation_data.sh [station_id]         # Single station, 1 hour"
+    echo "  ./fetch_multistation_data.sh [station_id] [hours] # Single station, custom hours"
+    echo ""
+    echo "Available station IDs:"
+    echo "  Porkkala Area:"
+    echo "    101023 - Emäsalo (Porvoo)"
+    echo "    100996 - Harmaja (Helsinki Maritime)"
+    echo "    151028 - Vuosaari (Helsinki)"
+    echo "    101022 - Kalbådagrund (Porkkala)"
+    echo "    105392 - Itätoukki (Sipoo)"
+    echo ""
+    echo "  Coastal Stations:"
+    echo "    100969 - Bågaskär (Inkoo)"
+    echo "    100965 - Jussarö (Raasepori)"
+    echo "    100946 - Tulliniemi (Hanko)"
+    echo "    100932 - Russarö (Hanko)"
+    echo "    100945 - Vänö (Kemiönsaari)"
+    echo "    100908 - Utö (Archipelago HELCOM)"
+    echo ""
+    echo "  Northern Coastal:"
+    echo "    101267 - Tahkoluoto (Pori)"
+    echo "    101661 - Tankar (Kokkola)"
+    echo "    101673 - Ulkokalla (Kalajoki)"
+    echo "    101784 - Marjaniemi (Hailuoto)"
+    echo "    101794 - Vihreäsaari (Oulu)"
+    echo ""
+    echo "Examples:"
+    echo "  ./fetch_multistation_data.sh                     # Default 3 stations, 1 hour"
+    echo "  ./fetch_multistation_data.sh 24                  # Default 3 stations, 24 hours"
+    echo "  ./fetch_multistation_data.sh 100996              # Harmaja station only, 1 hour"
+    echo "  ./fetch_multistation_data.sh 101022 2            # Kalbådagrund, 2 hours"
+    echo "  ./fetch_multistation_data.sh 100908 24 uto.xml   # Utö, 24 hours, custom file"
+    exit 0
+fi
 
-# Station IDs (modify these to fetch different stations)
-# Current stations:
-# 101023 - Emäsalo (Porvoo)
-# 100996 - Harmaja (Helsinki Maritime)
-# 151028 - Vuosaari (Helsinki)
-STATION_IDS=(
-    "101023"
-    "100996"
-    "151028"
-)
+# Check if first argument is a station ID (numeric)
+if [[ "$1" =~ ^[0-9]{6}$ ]]; then
+    # Single station mode
+    SINGLE_STATION_ID=$1
+    HOURS_BACK=${2:-1}
+    OUTPUT_FILE=${3:-"station_${SINGLE_STATION_ID}_response.xml"}
+    STATION_IDS=("$SINGLE_STATION_ID")
+else
+    # Multi-station mode (default 3 stations)
+    HOURS_BACK=${1:-1}
+    OUTPUT_FILE=${2:-"test_three_station_response.xml"}
+    
+    # Default stations:
+    # 101023 - Emäsalo (Porvoo)
+    # 100996 - Harmaja (Helsinki Maritime)
+    # 151028 - Vuosaari (Helsinki)
+    STATION_IDS=(
+        "101023"
+        "100996"
+        "151028"
+    )
+fi
 
 # You can add more stations by uncommenting below:
 # Additional Porkkala area stations:
@@ -61,7 +118,11 @@ FULL_URL="${BASE_URL}?${PARAMS}"
 
 # Display info
 echo "=========================================="
-echo "FMI Multi-Station Wind Data Fetcher"
+if [ ${#STATION_IDS[@]} -eq 1 ]; then
+    echo "FMI Single-Station Wind Data Fetcher"
+else
+    echo "FMI Multi-Station Wind Data Fetcher"
+fi
 echo "=========================================="
 echo "Time range: ${START_TIME} to ${END_TIME}"
 echo "Stations: ${STATION_IDS[@]}"
@@ -103,9 +164,27 @@ if curl -s "${FULL_URL}" -o "${OUTPUT_FILE}"; then
     echo "  - Observations per station: $((OBS_COUNT / STATION_COUNT))"
     echo ""
     echo "Station details:"
-    echo "  - 101023: Emäsalo (Porvoo)"
-    echo "  - 100996: Harmaja (Helsinki Maritime)"
-    echo "  - 151028: Vuosaari (Helsinki)"
+    for station in "${STATION_IDS[@]}"; do
+        case "$station" in
+            "101023") echo "  - ${station}: Emäsalo (Porvoo)" ;;
+            "100996") echo "  - ${station}: Harmaja (Helsinki Maritime)" ;;
+            "151028") echo "  - ${station}: Vuosaari (Helsinki)" ;;
+            "101022") echo "  - ${station}: Kalbådagrund (Porkkala)" ;;
+            "105392") echo "  - ${station}: Itätoukki (Sipoo)" ;;
+            "100969") echo "  - ${station}: Bågaskär (Inkoo)" ;;
+            "100965") echo "  - ${station}: Jussarö (Raasepori)" ;;
+            "100946") echo "  - ${station}: Tulliniemi (Hanko)" ;;
+            "100932") echo "  - ${station}: Russarö (Hanko)" ;;
+            "100945") echo "  - ${station}: Vänö (Kemiönsaari)" ;;
+            "100908") echo "  - ${station}: Utö (Archipelago HELCOM)" ;;
+            "101267") echo "  - ${station}: Tahkoluoto (Pori)" ;;
+            "101661") echo "  - ${station}: Tankar (Kokkola)" ;;
+            "101673") echo "  - ${station}: Ulkokalla (Kalajoki)" ;;
+            "101784") echo "  - ${station}: Marjaniemi (Hailuoto)" ;;
+            "101794") echo "  - ${station}: Vihreäsaari (Oulu)" ;;
+            *) echo "  - ${station}: (Unknown station)" ;;
+        esac
+    done
     
 else
     echo "❌ Error: Failed to fetch data from FMI API"

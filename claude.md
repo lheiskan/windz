@@ -81,6 +81,21 @@ make linux-arm64  # ARM64 binary with git metadata
 
 ## Development Guidelines
 
+### MANDATORY Go File Workflow - NEVER SKIP
+**CRITICAL**: Always format Go files BEFORE staging them for git operations:
+
+```bash
+# 1. Make changes to .go files
+# 2. Format BEFORE staging (MANDATORY - pre-commit hook WILL fail otherwise)
+gofmt -w main.go
+gofmt -w pkg/**/*.go
+# 3. THEN stage and commit  
+git add main.go
+git commit -m "..."
+```
+
+**⚠️ REMINDER**: The project has a pre-commit hook that enforces gofmt formatting. Never `git add` Go files without running `gofmt -w` first!
+
 ### Code Standards
 - Use conventional commit format: `feat:`, `fix:`, `docs:`  
 - Run `gofmt -w` before commits (pre-commit hook enforces)

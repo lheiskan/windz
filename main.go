@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -70,7 +71,7 @@ type SSEMessage struct {
 	StationID     string         `json:"station_id,omitempty"`
 	Data          *WindReading   `json:"data,omitempty"`
 	StationStatus *StationStatus `json:"station_status,omitempty"`
-	Timestamp     time.Time      `json:"timestamp"`
+	Id            int64          `json:"id"` // Unix timestamp for SSE message ID
 }
 
 // PerformanceMetrics tracks FMI API efficiency
@@ -507,7 +508,7 @@ func pollDueStations() {
 							SuccessRate: state.SuccessRate,
 							LastPolled:  state.LastPolled,
 						},
-						Timestamp: time.Now(),
+						Id: state.LastPolled.Unix(),
 					})
 				}
 
@@ -798,7 +799,7 @@ func updateWindData(stationID string, obs WindObservation) {
 		Type:      "data",
 		StationID: stationID,
 		Data:      reading,
-		Timestamp: time.Now(),
+		Id:        reading.UpdatedAt.Unix(),
 	})
 }
 
@@ -925,6 +926,81 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Send initial data to a new SSE client
+func sendInitialData(clientChan chan SSEMessage) {
+	// Send initial wind data
+	windDataMutex.RLock()
+	for _, reading := range windData {
+		clientChan <- SSEMessage{
+			Type:      "data",
+			StationID: reading.StationID,
+			Data:      reading,
+			Id:        reading.UpdatedAt.Unix(),
+		}
+	}
+	windDataMutex.RUnlock()
+
+	// Send initial status for all stations
+	pollingStatesMutex.RLock()
+	for stationID, state := range pollingStates {
+		clientChan <- SSEMessage{
+			Type:      "status",
+			StationID: stationID,
+			StationStatus: &StationStatus{
+				Interval:    formatInterval(state.CurrentInterval),
+				SuccessRate: state.SuccessRate,
+				LastPolled:  state.LastPolled,
+			},
+			Id: state.LastPolled.Unix(),
+		}
+	}
+	pollingStatesMutex.RUnlock()
+}
+
+// Send catch-up data to a reconnecting SSE client
+func sendCatchupData(clientChan chan SSEMessage, lastSeen time.Time) {
+	var dataCount, statusCount int
+
+	// Catch up wind data using UpdatedAt
+	windDataMutex.RLock()
+	for stationID, reading := range windData {
+		if reading.UpdatedAt.After(lastSeen) {
+			clientChan <- SSEMessage{
+				Type:      "data",
+				StationID: stationID,
+				Data:      reading,
+				Id:        reading.UpdatedAt.Unix(),
+			}
+			dataCount++
+		}
+	}
+	windDataMutex.RUnlock()
+
+	// Catch up status changes using LastPolled
+	pollingStatesMutex.RLock()
+	for stationID, state := range pollingStates {
+		if state.LastPolled.After(lastSeen) {
+			clientChan <- SSEMessage{
+				Type:      "status",
+				StationID: stationID,
+				StationStatus: &StationStatus{
+					Interval:    formatInterval(state.CurrentInterval),
+					SuccessRate: state.SuccessRate,
+					LastPolled:  state.LastPolled,
+				},
+				Id: state.LastPolled.Unix(),
+			}
+			statusCount++
+		}
+	}
+	pollingStatesMutex.RUnlock()
+
+	if *debug {
+		log.Printf("SSE catch-up completed: %d data events, %d status events (since %v)",
+			dataCount, statusCount, lastSeen.Format("15:04:05"))
+	}
+}
+
 // Handle SSE connections
 func handleSSE(w http.ResponseWriter, r *http.Request) {
 	// Set SSE headers
@@ -949,33 +1025,46 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 		close(clientChan)
 	}()
 
-	// Send initial data and status
-	windDataMutex.RLock()
-	for _, reading := range windData {
-		clientChan <- SSEMessage{
-			Type:      "data",
-			StationID: reading.StationID,
-			Data:      reading,
-			Timestamp: time.Now(),
-		}
-	}
-	windDataMutex.RUnlock()
+	// Check for reconnection
+	var lastSeen time.Time
+	var isReconnect bool
 
-	// Send initial status for all stations
-	pollingStatesMutex.RLock()
-	for stationID, state := range pollingStates {
-		clientChan <- SSEMessage{
-			Type:      "status",
-			StationID: stationID,
-			StationStatus: &StationStatus{
-				Interval:    formatInterval(state.CurrentInterval),
-				SuccessRate: state.SuccessRate,
-				LastPolled:  state.LastPolled,
-			},
-			Timestamp: time.Now(),
+	// Priority 1: Check URL query parameter (manual reconnection)
+	if idParam := r.URL.Query().Get("id"); idParam != "" {
+		if lastSeenUnix, err := strconv.ParseInt(idParam, 10, 64); err == nil {
+			lastSeen = time.Unix(lastSeenUnix, 0)
+			isReconnect = true
+			if *debug {
+				log.Printf("SSE reconnect with id parameter: %s (time: %v)",
+					idParam, lastSeen.Format("15:04:05"))
+			}
 		}
 	}
-	pollingStatesMutex.RUnlock()
+
+	// Priority 2: Check Last-Event-ID header (automatic browser reconnection)
+	if !isReconnect {
+		if lastEventID := r.Header.Get("Last-Event-ID"); lastEventID != "" {
+			if lastSeenUnix, err := strconv.ParseInt(lastEventID, 10, 64); err == nil {
+				lastSeen = time.Unix(lastSeenUnix, 0)
+				isReconnect = true
+				if *debug {
+					log.Printf("SSE automatic reconnect with Last-Event-ID: %s (time: %v)",
+						lastEventID, lastSeen.Format("15:04:05"))
+				}
+			}
+		}
+	}
+
+	if isReconnect {
+		// Send catch-up data for events after lastSeen
+		sendCatchupData(clientChan, lastSeen)
+	} else {
+		// Initial connection - send all current data
+		if *debug {
+			log.Printf("SSE initial connection (no prior ID)")
+		}
+		sendInitialData(clientChan)
+	}
 
 	// Get flusher
 	flusher, ok := w.(http.Flusher)
@@ -989,6 +1078,7 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 		case msg := <-clientChan:
 			data, _ := json.Marshal(msg)
+			fmt.Fprintf(w, "id: %d\n", msg.Id) // Unix timestamp as SSE id
 			fmt.Fprintf(w, "event: %s\n", msg.Type)
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
@@ -1507,6 +1597,8 @@ const htmlContent = `<!DOCTYPE html>
         const stationRows = new Map();
         let eventSource = null;
         let isConnected = false;
+        let globalLastId = 0;  // Track max Unix timestamp across all events
+        let isPageVisible = !document.hidden;
 
         function initializeTable() {
             const tbody = document.getElementById('wind-data');
@@ -1615,6 +1707,15 @@ const htmlContent = `<!DOCTYPE html>
             document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
         }
 
+        function trackGlobalId(id) {
+            if (!id || typeof id !== 'number') return;
+            
+            // Keep track of the globally latest Unix timestamp across all events
+            if (id > globalLastId) {
+                globalLastId = id;
+            }
+        }
+
         function updateConnectionStatus(connected) {
             isConnected = connected;
             const indicator = document.getElementById('connection-indicator');
@@ -1634,15 +1735,29 @@ const htmlContent = `<!DOCTYPE html>
                 eventSource.close();
             }
 
-            eventSource = new EventSource('/events');
+            // Build URL with id parameter if we have a last known ID (from this session)
+            let url = '/events';
+            if (globalLastId > 0) {
+                url += '?id=' + globalLastId;
+                console.log('Reconnecting SSE with id:', globalLastId);
+            } else {
+                console.log('Connecting SSE (fresh start)');
+            }
+
+            eventSource = new EventSource(url);
 
             eventSource.onopen = function() {
+                console.log('SSE connected');
                 updateConnectionStatus(true);
             };
 
             eventSource.addEventListener('data', function(event) {
                 try {
                     const msg = JSON.parse(event.data);
+                    
+                    // Track the global maximum Unix timestamp
+                    trackGlobalId(msg.id);
+                    
                     if (msg.data) {
                         updateStationRow(msg.data);
                     }
@@ -1654,6 +1769,10 @@ const htmlContent = `<!DOCTYPE html>
             eventSource.addEventListener('status', function(event) {
                 try {
                     const msg = JSON.parse(event.data);
+                    
+                    // Track the global maximum Unix timestamp
+                    trackGlobalId(msg.id);
+                    
                     if (msg.station_status) {
                         updateStationStatus(msg.station_id, msg.station_status);
                     }
@@ -1663,8 +1782,9 @@ const htmlContent = `<!DOCTYPE html>
             });
 
             eventSource.onerror = function() {
+                console.log('SSE connection error - browser will auto-retry');
                 updateConnectionStatus(false);
-                setTimeout(connectSSE, 5000);
+                // Browser will automatically retry with Last-Event-ID header if available
             };
         }
 
@@ -1689,6 +1809,26 @@ const htmlContent = `<!DOCTYPE html>
                 console.error('Error fetching station status:', e);
             }
         }
+
+        // Page visibility handling
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden && isPageVisible) {
+                // Page hidden - disconnect
+                console.log('Page hidden - disconnecting SSE');
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                isPageVisible = false;
+                updateConnectionStatus(false);
+                
+            } else if (!document.hidden && !isPageVisible) {
+                // Page visible - reconnect with last known ID from this session
+                console.log('Page visible - reconnecting SSE');
+                connectSSE();
+                isPageVisible = true;
+            }
+        });
 
         // Update time ago every 30 seconds
         setInterval(() => {

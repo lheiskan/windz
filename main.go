@@ -92,6 +92,10 @@ type PerformanceMetrics struct {
 	TotalObservations   int           `json:"total_observations"`
 	AverageResponseTime time.Duration `json:"average_response_time"`
 	LastUpdated         time.Time     `json:"last_updated"`
+
+	// SSE client metrics
+	SSEClients    int  `json:"sse_clients"`
+	NoSSEFallback bool `json:"no_sse_fallback_active"`
 }
 
 // Global state
@@ -371,6 +375,11 @@ func runPollingScheduler(ctx context.Context) {
 // Poll stations that are due
 func pollDueStations() {
 
+	// Check if we have any SSE clients connected
+	sseClientsMutex.RLock()
+	hasSSEClients := len(sseClients) > 0
+	sseClientsMutex.RUnlock()
+
 	// Polling state is updated during this method
 	// TODO: refactor?
 	pollingStatesMutex.Lock()
@@ -392,8 +401,9 @@ func pollDueStations() {
 			pollingStates[station.ID] = state
 		}
 
-		// schedule poll if needed
-		if now.Sub(state.LastPolled) >= state.CurrentInterval {
+		// schedule poll if needed - use effective interval based on SSE clients
+		effectiveInterval := getEffectivePollingInterval(state.CurrentInterval, hasSSEClients)
+		if now.Sub(state.LastPolled) >= effectiveInterval {
 			toPoll = append(toPoll, state)
 		}
 	}
@@ -424,9 +434,11 @@ func pollDueStations() {
 		timeWindowGroups[effectiveStartTime] = append(timeWindowGroups[effectiveStartTime], state)
 	}
 
-	// Update time window groups metric
+	// Update time window groups and SSE metrics
 	perfMetricsMutex.Lock()
 	perfMetrics.TimeWindowGroups = len(timeWindowGroups)
+	perfMetrics.SSEClients = len(sseClients)
+	perfMetrics.NoSSEFallback = !hasSSEClients
 	perfMetricsMutex.Unlock()
 
 	// Process each time window group in batches of up to 20 stations
@@ -750,6 +762,15 @@ func getNextSlowerInterval(current time.Duration) time.Duration {
 	}
 }
 
+// Get effective polling interval considering SSE client presence
+func getEffectivePollingInterval(baseInterval time.Duration, hasSSEClients bool) time.Duration {
+	if !hasSSEClients {
+		// No SSE clients - force hourly polling to save resources
+		return IntervalSlow // 60 minutes
+	}
+	return baseInterval // Use normal adaptive interval
+}
+
 // Update wind data and broadcast to SSE clients
 func updateWindData(stationID string, obs WindObservation) {
 	station := getStation(stationID)
@@ -1059,6 +1080,10 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 			"gzip_usage_rate":        float64(perfMetricsCopy.GzipResponses) / math.Max(float64(perfMetricsCopy.GzipRequests), 1),
 			"gzip_saved_bytes":       perfMetricsCopy.GzipSavedBytes,
 			"gzip_compression_ratio": perfMetricsCopy.GzipCompressionRatio,
+
+			// SSE client metrics
+			"sse_clients":     perfMetricsCopy.SSEClients,
+			"no_sse_fallback": perfMetricsCopy.NoSSEFallback,
 
 			"last_updated": perfMetricsCopy.LastUpdated,
 		},

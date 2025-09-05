@@ -20,6 +20,15 @@ type Manager interface {
 
 	// Broadcast sends a message to all connected clients
 	Broadcast(message Message)
+
+	// SetClientConnectCallback sets a callback to be called when a new client connects
+	SetClientConnectCallback(callback func(clientID string))
+
+	// NotifyClientConnected notifies about a new client connection
+	NotifyClientConnected(clientID string)
+
+	// SendToClient sends a message to a specific client
+	SendToClient(clientID string, message Message)
 }
 
 // Message represents a Server-Sent Event message

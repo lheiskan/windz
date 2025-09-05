@@ -8,16 +8,6 @@ import (
 	"time"
 )
 
-// ObservationProvider defines the interface for getting observation data
-type ObservationProvider interface {
-	GetAllLatestObservations() map[string]interface{}
-}
-
-// StationProvider defines the interface for getting station data
-type StationProvider interface {
-	GetAllStations() []interface{}
-}
-
 // RegisterHandlers registers the SSE HTTP handlers
 func RegisterHandlers(mux *http.ServeMux, mgr Manager) {
 	mux.HandleFunc("/events", handleSSE(mgr))
@@ -64,6 +54,9 @@ func handleSSE(mgr Manager) http.HandlerFunc {
 			return
 		}
 		flusher.Flush()
+
+		// Notify manager about new client (will trigger initial data send)
+		mgr.NotifyClientConnected(clientID)
 
 		// Create a ticker for keepalive messages
 		keepaliveTicker := time.NewTicker(30 * time.Second)
@@ -145,6 +138,11 @@ func writeSSEMessage(w http.ResponseWriter, msg Message) error {
 	}
 
 	return nil
+}
+
+// WriteSSEMessage is a helper function to write SSE messages (exported for external use)
+func WriteSSEMessage(w http.ResponseWriter, msg Message) error {
+	return writeSSEMessage(w, msg)
 }
 
 // @vibe: 🤖 -- ai

@@ -9,8 +9,10 @@ import (
 
 // manager implements the SSE Manager interface
 type manager struct {
-	clients map[string]chan Message
-	mu      sync.RWMutex
+	clients         map[string]chan Message
+	mu              sync.RWMutex
+	connectCallback func(clientID string)
+	callbackMu      sync.RWMutex
 }
 
 // NewManager creates a new SSE manager instance
@@ -94,6 +96,53 @@ func (m *manager) Broadcast(message Message) {
 
 	if len(m.clients) > 0 {
 		log.Printf("Broadcasted SSE message type=%s to %d clients", message.Type, len(m.clients))
+	}
+}
+
+// SetClientConnectCallback sets a callback to be called when a new client connects
+func (m *manager) SetClientConnectCallback(callback func(clientID string)) {
+	m.callbackMu.Lock()
+	defer m.callbackMu.Unlock()
+	m.connectCallback = callback
+}
+
+// NotifyClientConnected notifies about a new client connection
+func (m *manager) NotifyClientConnected(clientID string) {
+	m.callbackMu.RLock()
+	callback := m.connectCallback
+	m.callbackMu.RUnlock()
+
+	if callback != nil {
+		// Call the callback in a goroutine to avoid blocking the SSE handler
+		go callback(clientID)
+	}
+}
+
+// SendToClient sends a message to a specific client
+func (m *manager) SendToClient(clientID string, message Message) {
+	m.mu.RLock()
+	clientChan, exists := m.clients[clientID]
+	m.mu.RUnlock()
+
+	if !exists {
+		log.Printf("SSE client %s not found, cannot send message", clientID)
+		return
+	}
+
+	// Set timestamp and ID if not already set
+	if message.Timestamp.IsZero() {
+		message.Timestamp = time.Now()
+	}
+	if message.ID == 0 {
+		message.ID = message.Timestamp.Unix()
+	}
+
+	select {
+	case clientChan <- message:
+		// Message sent successfully
+	default:
+		// Channel is full, client is slow or disconnected
+		log.Printf("SSE client %s channel full, skipping message", clientID)
 	}
 }
 

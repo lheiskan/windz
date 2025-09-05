@@ -33,6 +33,19 @@ func (m *mockSSEManager) Broadcast(message sse.Message) {
 	m.messages = append(m.messages, message)
 }
 
+func (m *mockSSEManager) SetClientConnectCallback(callback func(clientID string)) {
+	// Mock implementation - no-op for tests
+}
+
+func (m *mockSSEManager) NotifyClientConnected(clientID string) {
+	// Mock implementation - no-op for tests
+}
+
+func (m *mockSSEManager) SendToClient(clientID string, message sse.Message) {
+	// Mock implementation - just add to messages for testing
+	m.messages = append(m.messages, message)
+}
+
 func TestNewManager(t *testing.T) {
 	stationMgr := stations.NewManager()
 	sseMgr := &mockSSEManager{}

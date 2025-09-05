@@ -62,6 +62,25 @@ func main() {
 	mux.HandleFunc("/health", handleHealth(stationManager, sseManager))
 	mux.HandleFunc("/metrics", handleMetrics(observationManager))
 
+	// Set up callback for SSE client connections to send initial data
+	sseManager.SetClientConnectCallback(func(clientID string) {
+		// Get all current observations
+		allObservations := observationManager.GetAllLatestObservations()
+
+		// Send each observation as a data message to the specific client
+		for stationID, obs := range allObservations {
+			dataMsg := sse.Message{
+				Type:      "data",
+				StationID: stationID,
+				Data:      obs,
+				Timestamp: obs.UpdatedAt,
+			}
+			sseManager.SendToClient(clientID, dataMsg)
+		}
+
+		log.Printf("Sent %d initial observations to SSE client %s", len(allObservations), clientID)
+	})
+
 	// Register module handlers
 	sse.RegisterHandlers(mux, sseManager)
 	stations.RegisterHandlers(mux, stationManager)
@@ -191,11 +210,108 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
     </div>
     <p><a href="/api/stations">View Stations API</a> | <a href="/api/observations/latest">View Latest Observations</a></p>
     <script>
-        // Connect to SSE for real-time updates (simplified version)
-        const eventSource = new EventSource('/events');
-        eventSource.onmessage = function(event) {
-            console.log('SSE:', event.data);
-        };
+        let eventSource = null;
+        let isPageVisible = !document.hidden;
+        let stationData = new Map();
+
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            console.log('Connecting to SSE...');
+            eventSource = new EventSource('/events');
+
+            eventSource.onopen = function() {
+                console.log('SSE connected');
+                updateConnectionStatus(true);
+            };
+
+            eventSource.addEventListener('connected', function(event) {
+                console.log('SSE connection confirmed:', event.data);
+            });
+
+            eventSource.addEventListener('data', function(event) {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.data) {
+                        updateStationData(msg.data);
+                        stationData.set(msg.station_id, msg.data);
+                    }
+                } catch (e) {
+                    console.error('Error parsing SSE data:', e);
+                }
+            });
+
+            eventSource.onerror = function() {
+                console.log('SSE connection error');
+                updateConnectionStatus(false);
+            };
+        }
+
+        function updateStationData(data) {
+            // Simple DOM update for the station data
+            const stationDivs = document.querySelectorAll('.station');
+            stationDivs.forEach(div => {
+                const stationName = div.querySelector('strong').textContent;
+                if (data.station_name === stationName) {
+                    const dataSpan = div.querySelector('span');
+                    const windSpeed = data.wind_speed >= 0 ? data.wind_speed.toFixed(1) : '-';
+                    const windGust = data.wind_gust >= 0 ? data.wind_gust.toFixed(1) : '-';
+                    const time = new Date(data.updated_at).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+                    
+                    dataSpan.textContent = windSpeed + ' m/s, gust ' + windGust + ' m/s, ' + time;
+                    dataSpan.className = 'data';
+                }
+            });
+        }
+
+        function updateConnectionStatus(connected) {
+            // Add a simple connection indicator
+            let indicator = document.getElementById('connection-status');
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'connection-status';
+                indicator.style.cssText = 'position:fixed;top:10px;right:10px;padding:5px 10px;border-radius:3px;font-size:12px;z-index:1000;';
+                document.body.appendChild(indicator);
+            }
+            
+            if (connected) {
+                indicator.textContent = '🟢 Connected';
+                indicator.style.background = '#d4edda';
+                indicator.style.color = '#155724';
+            } else {
+                indicator.textContent = '🔴 Disconnected';
+                indicator.style.background = '#f8d7da';
+                indicator.style.color = '#721c24';
+            }
+        }
+
+        // Page Visibility API - the key feature for battery saving
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                // Page hidden - disconnect SSE to save battery
+                console.log('Page hidden - disconnecting SSE for battery savings');
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                updateConnectionStatus(false);
+                isPageVisible = false;
+            } else {
+                // Page visible - reconnect SSE and get fresh data
+                console.log('Page visible - reconnecting SSE');
+                connectSSE();
+                isPageVisible = true;
+            }
+        });
+
+        // Connect on initial page load
+        connectSSE();
+
+        // Debug info
+        console.log('WindZ Monitor initialized with battery-saving SSE reconnection');
     </script>
 </body>
 </html>`)

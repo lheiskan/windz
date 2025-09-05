@@ -1,18 +1,33 @@
 # WindZ Monitor
 
-A high-performance wind monitoring application for Finnish weather stations with intelligent API optimization and real-time data streaming. Features multi-station batching, gzip compression, and comprehensive performance metrics.
+A high-performance, modular wind monitoring application for Finnish weather stations with intelligent API optimization, battery-saving SSE reconnection, and real-time data streaming. Built with clean architecture and comprehensive performance optimization.
 
 ## Features
 
+### 🚀 **Core Functionality**
 - **16 Coastal & Maritime Stations**: Monitors key Finnish weather stations including Porkkala lighthouse area
 - **Intelligent Batching**: Groups up to 20 stations per API call based on compatible time windows
 - **Gzip Compression**: Automatic compression for reduced bandwidth usage
 - **Adaptive Polling**: Automatically adjusts polling frequency (1m-24h) based on station activity
 - **Real-time Updates**: SSE streaming with instant updates when new data arrives
-- **Performance Metrics**: Comprehensive tracking of API efficiency and optimization
+
+### 📱 **Battery & Mobile Optimization**
+- **Page Visibility API**: Automatically disconnects SSE when tab is hidden to save mobile battery
+- **Smart Reconnection**: Full data refresh when page becomes visible again
+- **Zero Data Loss**: Complete catch-up on reconnect ensures no missed observations
+- **Connection Status**: Visual indicators for SSE connection state
+
+### 🏗️ **Modern Architecture**
+- **Modular Design**: Clean separation into SSE, Stations, and Observations modules
+- **Thread-Safe**: Proper concurrency control with minimal lock contention
+- **Interface-Based**: Loose coupling with dependency injection
+- **Comprehensive Testing**: Full test coverage across all modules
+
+### ⚡ **Performance & Production**
 - **Single Binary**: Fully self-contained application with embedded HTML/CSS/JS
 - **Low Resource Usage**: <50MB RAM, minimal CPU usage
 - **Production Ready**: Health checks, metrics, graceful shutdown
+- **Performance Metrics**: Comprehensive tracking of API efficiency and optimization
 
 ## Quick Start
 
@@ -78,13 +93,62 @@ The application features advanced FMI API optimization:
 - **60m** - Stations with hourly updates
 - **24h** - Inactive or offline stations
 
+## Architecture
+
+### 🏗️ **Modular Design**
+
+WindZ is built with a clean, modular architecture that separates concerns and enables easy testing and maintenance:
+
+```
+windz/
+├── main.go                 # Application entry point and coordination
+├── internal/               # Internal modules
+│   ├── sse/               # Server-Sent Events module
+│   │   ├── interface.go   # SSE Manager interface
+│   │   ├── manager.go     # Thread-safe client management
+│   │   ├── handlers.go    # HTTP endpoint with battery-saving features
+│   │   └── manager_test.go
+│   ├── stations/          # Weather station metadata module
+│   │   ├── interface.go   # Station Manager interface
+│   │   ├── manager.go     # Station data and coordinate management
+│   │   ├── handlers.go    # Station API endpoints
+│   │   └── manager_test.go
+│   └── observations/      # Weather observation polling module
+│       ├── interface.go   # Observation Manager interface
+│       ├── manager.go     # FMI API integration and adaptive polling
+│       ├── handlers.go    # Observation API endpoints
+│       └── manager_test.go
+└── pkg/fmi/              # FMI API client library
+```
+
+### 🔄 **Battery-Saving SSE Flow**
+
+1. **Page Load** → SSE connects → Callback sends all current observations
+2. **Tab Hidden** → JavaScript disconnects SSE (saves battery)
+3. **Tab Visible** → JavaScript reconnects → Fresh data automatically sent
+4. **Network Issues** → Browser auto-reconnects → Complete data refresh
+
+### 🧵 **Concurrency & Performance**
+
+- **Minimal Lock Contention**: Polling holds locks only during brief map operations (microseconds)
+- **Thread-Safe Design**: All modules use proper mutex protection for concurrent access
+- **Non-Blocking Operations**: SSE callbacks run in goroutines to prevent blocking
+- **Value Semantics**: Uses copies instead of shared pointers for data safety
+
 ## API Endpoints
 
-- `/` - Main dashboard with real-time wind data table
-- `/events` - SSE stream for real-time updates
-- `/health` - Application health status
+### 🌐 **Web Interface**
+- `/` - Main dashboard with real-time wind data table and battery-saving SSE
+- `/events` - SSE stream with automatic initial data and reconnection support
+
+### 📊 **JSON APIs**
+- `/health` - Application health status with build information
 - `/metrics` - Comprehensive polling and FMI API performance metrics
-- `/api/stations` - JSON API with station status and latest data
+- `/api/stations` - Station metadata with coordinates and filtering
+- `/api/stations/{id}` - Individual station lookup
+- `/api/observations` - All latest wind observations
+- `/api/observations/latest` - Latest observations as array
+- `/api/observations/{id}` - Specific station observation
 
 ### Metrics Data
 The `/metrics` endpoint provides detailed performance analytics:
@@ -94,20 +158,66 @@ The `/metrics` endpoint provides detailed performance analytics:
 - **Polling Stats**: Success rates, station activity distribution
 - **Time Window Groups**: Real-time batching group counts
 
+## Development
+
+### 🧪 **Running Tests**
+
+```bash
+# Run all tests
+go test ./...
+
+# Run specific module tests
+go test ./internal/sse/
+go test ./internal/stations/
+go test ./internal/observations/
+
+# Run with coverage
+go test -cover ./...
+
+# Run with race detection
+go test -race ./...
+```
+
+### 🔧 **Development Commands**
+
+```bash
+# Build for development
+go build -o windz-dev .
+
+# Run with hot reload (requires air: go install github.com/cosmtrek/air@latest)
+air
+
+# Format code
+go fmt ./...
+
+# Lint code (requires golangci-lint)
+golangci-lint run
+```
+
 ## Configuration
 
 ### Command Line Flags
 ```bash
--port int          HTTP server port (default 8080)
--state-file string Polling state persistence file (default "polling_state.json")
--debug            Enable debug logging
+-port int             HTTP server port (default 8080)
+-state-file string    Polling state persistence file (default "polling_state.json")
+-wind-data-file string Wind data cache persistence file (default "wind_data.json")
+-debug               Enable debug logging with detailed SSE reconnection info
 ```
 
 ### Environment Variables
 ```bash
 WINDZ_PORT=8080
-WINDZ_STATE_FILE=/var/lib/windz/state.json
+WINDZ_STATE_FILE=/var/lib/windz/polling_state.json
+WINDZ_WIND_DATA_FILE=/var/lib/windz/wind_data.json
+WINDZ_DEBUG=true
 ```
+
+### 🔍 **Debug Mode Features**
+When running with `-debug` flag:
+- Detailed FMI API batch processing logs  
+- SSE client connection/disconnection tracking
+- Polling state transitions and interval changes
+- Performance metrics for time window grouping
 
 ## Building for Production
 

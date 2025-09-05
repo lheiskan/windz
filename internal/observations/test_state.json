@@ -1,0 +1,162 @@
+{
+  "100908": {
+    "station_id": "100908",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174888+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "100932": {
+    "station_id": "100932",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174884+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "100945": {
+    "station_id": "100945",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174888+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "100946": {
+    "station_id": "100946",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174884+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "100965": {
+    "station_id": "100965",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174882+03:00",
+    "last_observation": "2025-09-05T11:51:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "100969": {
+    "station_id": "100969",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174882+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "100996": {
+    "station_id": "100996",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174881+03:00",
+    "last_observation": "2025-09-05T11:51:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "101022": {
+    "station_id": "101022",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174878+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "101023": {
+    "station_id": "101023",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174873+03:00",
+    "last_observation": "2025-09-05T11:51:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "101267": {
+    "station_id": "101267",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174889+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "101661": {
+    "station_id": "101661",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174889+03:00",
+    "last_observation": "2025-09-05T11:51:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "101673": {
+    "station_id": "101673",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.17489+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "101784": {
+    "station_id": "101784",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174891+03:00",
+    "last_observation": "2025-09-05T11:52:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "101794": {
+    "station_id": "101794",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174892+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "105392": {
+    "station_id": "105392",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174879+03:00",
+    "last_observation": "2025-09-05T11:50:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  },
+  "151028": {
+    "station_id": "151028",
+    "current_interval": 60000000000,
+    "consecutive_misses": 0,
+    "last_polled": "2025-09-05T11:52:38.174879+03:00",
+    "last_observation": "2025-09-05T11:51:00+03:00",
+    "success_rate": 1,
+    "total_polls": 1,
+    "successful_polls": 1
+  }
+}

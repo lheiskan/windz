@@ -1,0 +1,162 @@
+{
+  "100908": {
+    "station_id": "100908",
+    "station_name": "Utö",
+    "region": "Archipelago HELCOM",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 6.2,
+    "wind_gust": 7.1,
+    "wind_direction": 170,
+    "updated_at": "2025-09-05T11:52:38.174888+03:00"
+  },
+  "100932": {
+    "station_id": "100932",
+    "station_name": "Russarö",
+    "region": "Hanko Southern",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 6.7,
+    "wind_gust": 7.1,
+    "wind_direction": 154,
+    "updated_at": "2025-09-05T11:52:38.174884+03:00"
+  },
+  "100945": {
+    "station_id": "100945",
+    "station_name": "Vänö",
+    "region": "Kemiönsaari",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 6.3,
+    "wind_gust": 8.2,
+    "wind_direction": 149,
+    "updated_at": "2025-09-05T11:52:38.174888+03:00"
+  },
+  "100946": {
+    "station_id": "100946",
+    "station_name": "Tulliniemi",
+    "region": "Hanko Coastal",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 6.6,
+    "wind_gust": 8.1,
+    "wind_direction": 150,
+    "updated_at": "2025-09-05T11:52:38.174884+03:00"
+  },
+  "100965": {
+    "station_id": "100965",
+    "station_name": "Jussarö",
+    "region": "Raasepori Maritime",
+    "timestamp": "2025-09-05T11:51:00+03:00",
+    "wind_speed": 2.7,
+    "wind_gust": 3.8,
+    "wind_direction": 103,
+    "updated_at": "2025-09-05T11:52:38.174884+03:00"
+  },
+  "100969": {
+    "station_id": "100969",
+    "station_name": "Bågaskär",
+    "region": "Inkoo Coastal",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 3.7,
+    "wind_gust": 4.6,
+    "wind_direction": 114,
+    "updated_at": "2025-09-05T11:52:38.174882+03:00"
+  },
+  "100996": {
+    "station_id": "100996",
+    "station_name": "Harmaja",
+    "region": "Helsinki Maritime",
+    "timestamp": "2025-09-05T11:51:00+03:00",
+    "wind_speed": 4.4,
+    "wind_gust": 5.3,
+    "wind_direction": 99,
+    "updated_at": "2025-09-05T11:52:38.174882+03:00"
+  },
+  "101022": {
+    "station_id": "101022",
+    "station_name": "Kalbådagrund",
+    "region": "Porkkala",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 2.9,
+    "wind_gust": 3.6,
+    "wind_direction": 96,
+    "updated_at": "2025-09-05T11:52:38.174879+03:00"
+  },
+  "101023": {
+    "station_id": "101023",
+    "station_name": "Emäsalo",
+    "region": "Porvoo",
+    "timestamp": "2025-09-05T11:51:00+03:00",
+    "wind_speed": 2.4,
+    "wind_gust": 3.1,
+    "wind_direction": 106,
+    "updated_at": "2025-09-05T11:52:38.174878+03:00"
+  },
+  "101267": {
+    "station_id": "101267",
+    "station_name": "Tahkoluoto",
+    "region": "Pori",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 4.4,
+    "wind_gust": 5.4,
+    "wind_direction": 164,
+    "updated_at": "2025-09-05T11:52:38.174889+03:00"
+  },
+  "101661": {
+    "station_id": "101661",
+    "station_name": "Tankar",
+    "region": "Kokkola",
+    "timestamp": "2025-09-05T11:51:00+03:00",
+    "wind_speed": 3.8,
+    "wind_gust": 4.5,
+    "wind_direction": 217,
+    "updated_at": "2025-09-05T11:52:38.17489+03:00"
+  },
+  "101673": {
+    "station_id": "101673",
+    "station_name": "Ulkokalla",
+    "region": "Kalajoki",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 4.7,
+    "wind_gust": 5.6,
+    "wind_direction": 224,
+    "updated_at": "2025-09-05T11:52:38.17489+03:00"
+  },
+  "101784": {
+    "station_id": "101784",
+    "station_name": "Marjaniemi",
+    "region": "Hailuoto",
+    "timestamp": "2025-09-05T11:52:00+03:00",
+    "wind_speed": 6.5,
+    "wind_gust": 7.1,
+    "wind_direction": 192,
+    "updated_at": "2025-09-05T11:52:38.174892+03:00"
+  },
+  "101794": {
+    "station_id": "101794",
+    "station_name": "Vihreäsaari",
+    "region": "Oulu",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 4.5,
+    "wind_gust": 5.7,
+    "wind_direction": 151,
+    "updated_at": "2025-09-05T11:52:38.174893+03:00"
+  },
+  "105392": {
+    "station_id": "105392",
+    "station_name": "Itätoukki",
+    "region": "Sipoo",
+    "timestamp": "2025-09-05T11:50:00+03:00",
+    "wind_speed": 4,
+    "wind_gust": 4.8,
+    "wind_direction": 102,
+    "updated_at": "2025-09-05T11:52:38.174879+03:00"
+  },
+  "151028": {
+    "station_id": "151028",
+    "station_name": "Vuosaari",
+    "region": "Helsinki",
+    "timestamp": "2025-09-05T11:51:00+03:00",
+    "wind_speed": 2.9,
+    "wind_gust": 3.6,
+    "wind_direction": 111,
+    "updated_at": "2025-09-05T11:52:38.17488+03:00"
+  }
+}

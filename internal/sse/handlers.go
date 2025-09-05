@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// ObservationProvider defines the interface for getting observation data
+type ObservationProvider interface {
+	GetAllLatestObservations() map[string]interface{}
+}
+
+// StationProvider defines the interface for getting station data
+type StationProvider interface {
+	GetAllStations() []interface{}
+}
+
 // RegisterHandlers registers the SSE HTTP handlers
 func RegisterHandlers(mux *http.ServeMux, mgr Manager) {
 	mux.HandleFunc("/events", handleSSE(mgr))
@@ -46,7 +56,7 @@ func handleSSE(mgr Manager) http.HandlerFunc {
 		// Send initial connection message
 		initialMsg := Message{
 			Type:      "connected",
-			Data:      map[string]interface{}{"client_id": clientID},
+			Data:      map[string]any{"client_id": clientID},
 			Timestamp: time.Now(),
 		}
 		if err := writeSSEMessage(w, initialMsg); err != nil {

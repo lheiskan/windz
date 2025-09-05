@@ -175,11 +175,10 @@ func (m *manager) pollDueStations() {
 	// Get all stations from station manager
 	allStations := m.stationMgr.GetAllStations()
 
+	// Phase 1: Collect stations to poll (hold lock briefly)
 	m.pollingStatesMutex.Lock()
-	defer m.pollingStatesMutex.Unlock()
-
 	now := time.Now()
-	toPoll := []*PollingState{}
+	toPoll := []PollingState{} // Values, not pointers
 
 	// Determine which stations need polling
 	for _, station := range allStations {
@@ -196,9 +195,11 @@ func (m *manager) pollDueStations() {
 		// Check if polling is due
 		effectiveInterval := getEffectivePollingInterval(state.CurrentInterval, hasSSEClients)
 		if now.Sub(state.LastPolled) >= effectiveInterval {
-			toPoll = append(toPoll, state)
+			// Append a copy of the state
+			toPoll = append(toPoll, *state)
 		}
 	}
+	m.pollingStatesMutex.Unlock() // Release lock early!
 
 	if len(toPoll) == 0 {
 		return
@@ -208,54 +209,65 @@ func (m *manager) pollDueStations() {
 		log.Printf("Polling %d stations", len(toPoll))
 	}
 
-	// Group stations for batch processing
+	// Phase 2: Process polling without holding lock
 	m.processBatchedPolling(toPoll, hasSSEClients)
+
+	// Phase 3: Write back updated states
+	m.pollingStatesMutex.Lock()
+	for i := range toPoll {
+		if currentState, exists := m.pollingStates[toPoll[i].StationID]; exists {
+			// Update the actual state with polling results
+			*currentState = toPoll[i]
+		}
+	}
+	m.pollingStatesMutex.Unlock()
 }
 
 // processBatchedPolling handles the batched FMI API requests
-func (m *manager) processBatchedPolling(toPoll []*PollingState, hasSSEClients bool) {
+func (m *manager) processBatchedPolling(toPoll []PollingState, hasSSEClients bool) {
 	const maxBatchSize = 20
 	endTime := time.Now()
 	defaultStartTime := endTime.Add(-2 * time.Hour)
 
-	// Group stations by effective time windows
-	timeWindowGroups := make(map[time.Time][]*PollingState)
+	// Group stations by effective time windows (store indices)
+	timeWindowGroups := make(map[time.Time][]int)
 
-	for _, state := range toPoll {
+	for i := range toPoll {
 		effectiveStartTime := defaultStartTime
-		if state.LastObservation.After(defaultStartTime) {
-			effectiveStartTime = state.LastObservation.Add(time.Second).Truncate(time.Second)
+		if toPoll[i].LastObservation.After(defaultStartTime) {
+			effectiveStartTime = toPoll[i].LastObservation.Add(time.Second).Truncate(time.Second)
 		}
-		timeWindowGroups[effectiveStartTime] = append(timeWindowGroups[effectiveStartTime], state)
+		timeWindowGroups[effectiveStartTime] = append(timeWindowGroups[effectiveStartTime], i)
 	}
 
 	// Process each time window group in batches
-	for groupStartTime, groupStations := range timeWindowGroups {
-		for i := 0; i < len(groupStations); i += maxBatchSize {
-			end := i + maxBatchSize
-			if end > len(groupStations) {
-				end = len(groupStations)
+	for groupStartTime, indices := range timeWindowGroups {
+		for start := 0; start < len(indices); start += maxBatchSize {
+			end := start + maxBatchSize
+			if end > len(indices) {
+				end = len(indices)
 			}
-			batch := groupStations[i:end]
+			batchIndices := indices[start:end]
 
 			// Execute batch request
-			stationIDs := make([]string, len(batch))
-			for j, state := range batch {
-				stationIDs[j] = state.StationID
+			stationIDs := make([]string, len(batchIndices))
+			for j, idx := range batchIndices {
+				stationIDs[j] = toPoll[idx].StationID
 			}
 
 			batchResults, err := m.fetchWindDataBatch(stationIDs, groupStartTime, endTime)
 			if err != nil {
 				log.Printf("Error fetching wind data for batch: %v", err)
 				// Mark all stations as failed
-				for _, state := range batch {
-					m.updateFailedPollingState(state)
+				for _, idx := range batchIndices {
+					m.updateFailedPollingState(&toPoll[idx])
 				}
 				continue
 			}
 
 			// Process results
-			for _, state := range batch {
+			for _, idx := range batchIndices {
+				state := &toPoll[idx] // Get pointer to modify the slice element
 				observations, hasObservations := batchResults[state.StationID]
 				if !hasObservations {
 					observations = []FMIWindObservation{}

@@ -75,12 +75,8 @@ func (m *manager) Broadcast(message Message) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Set timestamp and ID if not already set
-	if message.Timestamp.IsZero() {
-		message.Timestamp = time.Now()
-	}
 	if message.ID == 0 {
-		message.ID = message.Timestamp.Unix()
+		message.ID = time.Now().Unix()
 	}
 
 	// Send to all clients
@@ -130,11 +126,8 @@ func (m *manager) SendToClient(clientID string, message Message) {
 	}
 
 	// Set timestamp and ID if not already set
-	if message.Timestamp.IsZero() {
-		message.Timestamp = time.Now()
-	}
 	if message.ID == 0 {
-		message.ID = message.Timestamp.Unix()
+		message.ID = time.Now().Unix()
 	}
 
 	select {
@@ -161,5 +154,3 @@ func formatSSEMessage(msg Message) string {
 	result += "\n" // End of message
 	return result
 }
-
-// @vibe: 🤖 -- ai

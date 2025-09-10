@@ -421,10 +421,10 @@ func (m *manager) updateWindData(stationID string, obs FMIWindObservation) {
 
 	// Broadcast to SSE clients
 	m.sseMgr.Broadcast(sse.Message{
+		ID:        windObs.Timestamp.Unix(),
 		Type:      "data",
 		StationID: stationID,
 		Data:      windObs,
-		Timestamp: time.Now(),
 	})
 }
 
@@ -437,10 +437,10 @@ func (m *manager) broadcastStatusUpdate(state *PollingState) {
 	}
 
 	m.sseMgr.Broadcast(sse.Message{
+		ID:        state.LastPolled.Unix(),
 		Type:      "status",
 		StationID: state.StationID,
 		Data:      statusData,
-		Timestamp: time.Now(),
 	})
 }
 

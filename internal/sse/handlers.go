@@ -45,9 +45,9 @@ func handleSSE(mgr Manager) http.HandlerFunc {
 
 		// Send initial connection message
 		initialMsg := Message{
-			Type:      "connected",
-			Data:      map[string]any{"client_id": clientID},
-			Timestamp: time.Now(),
+			ID:   time.Now().Unix(),
+			Type: "connected",
+			Data: map[string]any{"client_id": clientID},
 		}
 		if err := writeSSEMessage(w, initialMsg); err != nil {
 			log.Printf("Error sending initial SSE message: %v", err)
@@ -100,9 +100,6 @@ func writeSSEMessage(w http.ResponseWriter, msg Message) error {
 	// Set ID and timestamp if not set
 	if msg.ID == 0 {
 		msg.ID = time.Now().Unix()
-	}
-	if msg.Timestamp.IsZero() {
-		msg.Timestamp = time.Now()
 	}
 
 	// Write SSE formatted message

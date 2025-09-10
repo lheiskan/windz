@@ -70,10 +70,10 @@ func main() {
 		// Send each observation as a data message to the specific client
 		for stationID, obs := range allObservations {
 			dataMsg := sse.Message{
+				ID:        obs.UpdatedAt.Unix(),
 				Type:      "data",
 				StationID: stationID,
 				Data:      obs,
-				Timestamp: obs.UpdatedAt,
 			}
 			sseManager.SendToClient(clientID, dataMsg)
 		}
@@ -210,28 +210,18 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
     </div>
     <p><a href="/api/stations">View Stations API</a> | <a href="/api/observations/latest">View Latest Observations</a></p>
     <script>
-        let eventSource = null;
-        let isPageVisible = !document.hidden;
         let stationData = new Map();
+		let eventSource = connectSSE();
 
         function connectSSE() {
-            if (eventSource) {
-                eventSource.close();
-                eventSource = null;
-            }
-
-            console.log('Connecting to SSE...');
-            eventSource = new EventSource('/events');
-
+			let eventSource = new EventSource('/events');
             eventSource.onopen = function() {
-                console.log('SSE connected');
-                updateConnectionStatus(true);
+                console.log('SSE connected event');
+				updateConnectionStatus(getState())
             };
-
             eventSource.addEventListener('connected', function(event) {
                 console.log('SSE connection confirmed:', event.data);
             });
-
             eventSource.addEventListener('data', function(event) {
                 try {
                     const msg = JSON.parse(event.data);
@@ -243,12 +233,13 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
                     console.error('Error parsing SSE data:', e);
                 }
             });
-
             eventSource.onerror = function() {
                 console.log('SSE connection error');
-                updateConnectionStatus(false);
+				updateConnectionStatus(getState())
             };
+			return eventSource;
         }
+
 
         function updateStationData(data) {
             // Simple DOM update for the station data
@@ -267,7 +258,26 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
             });
         }
 
-        function updateConnectionStatus(connected) {
+		function getState() {
+		  let state = "empty"
+		  if(eventSource) {
+			  switch(eventSource.readyState) {
+				case 0:
+					state = "connecting";
+					break;
+				case 1:
+					state = "connected";
+					break;
+				case 2:
+					state = "disconnected";
+					break;
+			  }
+		  }
+		  return state
+		}
+
+        function updateConnectionStatus(state) {
+			console.log("updating connection state: " + state)
             // Add a simple connection indicator
             let indicator = document.getElementById('connection-status');
             if (!indicator) {
@@ -276,42 +286,34 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
                 indicator.style.cssText = 'position:fixed;top:10px;right:10px;padding:5px 10px;border-radius:3px;font-size:12px;z-index:1000;';
                 document.body.appendChild(indicator);
             }
-            
-            if (connected) {
-                indicator.textContent = '🟢 Connected';
-                indicator.style.background = '#d4edda';
-                indicator.style.color = '#155724';
-            } else {
-                indicator.textContent = '🔴 Disconnected';
-                indicator.style.background = '#f8d7da';
-                indicator.style.color = '#721c24';
-            }
-        }
+			switch (state) {
+				case "connected":
+				  indicator.textContent = "🟢 Connected";
+				  indicator.style.background = "#d4edda";
+				  indicator.style.color = "#155724";
+				  break;
+				case "disconnected":
+				  indicator.textContent = "🔴 Disconnected";
+				  indicator.style.background = "#f8d7da";
+				  indicator.style.color = "#721c24";
+				  break;
+				case "connecting":
+				  indicator.textContent = "🟡 Connecting…";
+				  indicator.style.background = "#fff3cd";
+				  indicator.style.color = "#856404";
+				  break;
+				case "empty":
+				  indicator.textContent = "⚫ No event source";
+				  indicator.style.background = "#e2e3e5";
+				  indicator.style.color = "#383d41";
+				  break;
+			}
+		}
 
-        // Page Visibility API - the key feature for battery saving
         document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                // Page hidden - disconnect SSE to save battery
-                console.log('Page hidden - disconnecting SSE for battery savings');
-                if (eventSource) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-                updateConnectionStatus(false);
-                isPageVisible = false;
-            } else {
-                // Page visible - reconnect SSE and get fresh data
-                console.log('Page visible - reconnecting SSE');
-                connectSSE();
-                isPageVisible = true;
-            }
+			updateConnectionStatus(getState())
         });
 
-        // Connect on initial page load
-        connectSSE();
-
-        // Debug info
-        console.log('WindZ Monitor initialized with battery-saving SSE reconnection');
     </script>
 </body>
 </html>`)

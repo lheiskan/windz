@@ -30,11 +30,21 @@ var (
 	debug        = flag.Bool("debug", false, "Enable debug logging")
 )
 
+// Finnish timezone (init at startup)
+var helsinkiLoc *time.Location
+
 func main() {
 	flag.Parse()
 
 	log.Printf("WindZ Monitor starting on port %d", *port)
 	log.Printf("Build: %s (%s) - %s", BuildVersion, BuildCommit, BuildDate)
+
+	// initialize timezone
+	var err error
+	helsinkiLoc, err = time.LoadLocation("Europe/Helsinki")
+	if err != nil {
+		panic(err)
+	}
 
 	// Initialize managers
 	sseManager := sse.NewManager()
@@ -175,7 +185,7 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
 		fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head>
-    <title>WindZ Monitor - Modular Architecture</title>
+    <title>WindZ</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .station { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
@@ -184,8 +194,7 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
     </style>
 </head>
 <body>
-    <h1>WindZ Monitor</h1>
-    <p>Modular architecture with %d stations monitored</p>
+    <p>%d stations monitored</p>
     <div class="stations">`, len(templateData.Stations))
 
 		for _, station := range templateData.Stations {
@@ -196,7 +205,7 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
 				dataText = fmt.Sprintf("%.1f m/s, gust %.1f m/s, %s",
 					station.WindData.WindSpeed,
 					station.WindData.WindGust,
-					station.WindData.UpdatedAt.Format("15:04"))
+					station.WindData.UpdatedAt.In(helsinkiLoc).Format("15:04"))
 			}
 
 			fmt.Fprintf(w, `
@@ -250,7 +259,7 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
                     const dataSpan = div.querySelector('span');
                     const windSpeed = data.wind_speed >= 0 ? data.wind_speed.toFixed(1) : '-';
                     const windGust = data.wind_gust >= 0 ? data.wind_gust.toFixed(1) : '-';
-                    const time = new Date(data.updated_at).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+                    const time = new Date(data.updated_at).toLocaleTimeString('fi-FI', {hour: '2-digit', minute: '2-digit'});
                     
                     dataSpan.textContent = windSpeed + ' m/s, gust ' + windGust + ' m/s, ' + time;
                     dataSpan.className = 'data';

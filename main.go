@@ -202,9 +202,10 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
 			dataText := "No data"
 			if station.WindData != nil {
 				status = "data"
-				dataText = fmt.Sprintf("%.1f m/s, gust %.1f m/s, %s",
+				dataText = fmt.Sprintf("%.1f m/s, gust %.1f m/s, %.0f° %s",
 					station.WindData.WindSpeed,
 					station.WindData.WindGust,
+					station.WindData.WindDirection,
 					station.WindData.UpdatedAt.In(helsinkiLoc).Format("15:04"))
 			}
 

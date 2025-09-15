@@ -220,34 +220,56 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
     </div>
     <p><a href="/api/stations">View Stations API</a> | <a href="/api/observations/latest">View Latest Observations</a></p>
     <script>
-        let stationData = new Map();
-		let eventSource = connectSSE();
+		let eventSource = null;
 
-        function connectSSE() {
+		ensureSSE();
+
+		function ensureSSE() {
+			// if null, create
+			if(!eventSource || eventSource.readyState === 2){
+				eventSource = newSSE();
+			}
+
+			// connected or connecting
+
+		}
+
+        function newSSE() {
+
 			let eventSource = new EventSource('/events');
+
+			// if closed, recreate
+			if(eventSource.readyState == 2) {
+				eventSource=null;
+				eventSource = new EventSource('/events');
+			}
+
             eventSource.onopen = function() {
                 console.log('SSE connected event');
 				updateConnectionStatus(getState())
             };
+
             eventSource.addEventListener('connected', function(event) {
                 console.log('SSE connection confirmed:', event.data);
             });
+
             eventSource.addEventListener('data', function(event) {
                 try {
-                    const msg = JSON.parse(event.data);
-                    if (msg.data) {
-                        updateStationData(msg.data);
-                        stationData.set(msg.station_id, msg.data);
+                    const data = JSON.parse(event.data);
+                    if (data) {
+                        updateStationData(data);
                     }
                 } catch (e) {
                     console.error('Error parsing SSE data:', e);
                 }
             });
+
             eventSource.onerror = function() {
                 console.log('SSE connection error');
 				updateConnectionStatus(getState())
             };
 			return eventSource;
+
         }
 
 
@@ -260,9 +282,10 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
                     const dataSpan = div.querySelector('span');
                     const windSpeed = data.wind_speed >= 0 ? data.wind_speed.toFixed(1) : '-';
                     const windGust = data.wind_gust >= 0 ? data.wind_gust.toFixed(1) : '-';
+                    const windDirection = data.wind_direction>= 0 ? data.wind_direction.toFixed(0) : '-';
                     const time = new Date(data.updated_at).toLocaleTimeString('fi-FI', {hour: '2-digit', minute: '2-digit'});
                     
-                    dataSpan.textContent = windSpeed + ' m/s, gust ' + windGust + ' m/s, ' + time;
+                    dataSpan.textContent = windSpeed + ' m/s, gust ' + windGust + ' m/s, ' + windDirection + '° ' + time;
                     dataSpan.className = 'data';
                 }
             });
@@ -321,6 +344,7 @@ func handleIndex(stationMgr stations.Manager, obsMgr observations.Manager) http.
 		}
 
         document.addEventListener('visibilitychange', function() {
+			ensureSSE()
 			updateConnectionStatus(getState())
         });
 
